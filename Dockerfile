@@ -97,10 +97,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 COPY versions.env /tmp/versions.env
-COPY scripts/download-binaries.sh /tmp/download-binaries.sh
+COPY scripts/download-binaries.sh /tmp/scripts/download-binaries.sh
 
 # Download pre-built binaries (skip nvim — we built it from source)
-RUN SKIP_NVIM=1 bash /tmp/download-binaries.sh /staging linux
+RUN SKIP_NVIM=1 bash /tmp/scripts/download-binaries.sh /staging linux
 
 # Add compiled static binaries
 COPY --from=git-build /opt/git /staging/git/
@@ -110,7 +110,6 @@ COPY --from=nvim-build /opt/nvim /staging/nvim/
 
 # Create symlinks in bin/
 RUN ln -sf ../git/bin/git /staging/bin/git && \
-    ln -sf ../git/bin/git-remote-https /staging/bin/git-remote-https && \
     ln -sf ../zsh/bin/zsh /staging/bin/zsh && \
     ln -sf ../nvim/bin/nvim /staging/bin/nvim && \
     ln -sf ../go/bin/go /staging/bin/go && \

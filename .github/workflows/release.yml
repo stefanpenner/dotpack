@@ -20,7 +20,7 @@ jobs:
             arch: aarch64
     runs-on: ${{ matrix.runner }}
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
       - name: Build Linux bundle
         run: |
@@ -33,7 +33,7 @@ jobs:
           sha256sum dotpack-linux-${{ matrix.arch }}.tar.gz > dotpack-linux-${{ matrix.arch }}.tar.gz.sha256
 
       - name: Attest build provenance
-        uses: actions/attest-build-provenance@ef244123eb79f2f7a7e75d99086184180e6d0018 # v2.1.0
+        uses: actions/attest-build-provenance@a2bbfa25375fe432b6a289bc6b6cd05ecd0c4c32 # v2.1.0
         with:
           subject-path: dotpack-linux-${{ matrix.arch }}.tar.gz
 
@@ -55,7 +55,7 @@ jobs:
             arch: arm64
     runs-on: ${{ matrix.runner }}
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
       - name: Build Darwin bundle
         run: |
@@ -68,7 +68,7 @@ jobs:
           shasum -a 256 dotpack-darwin-${{ matrix.arch }}.tar.gz > dotpack-darwin-${{ matrix.arch }}.tar.gz.sha256
 
       - name: Attest build provenance
-        uses: actions/attest-build-provenance@ef244123eb79f2f7a7e75d99086184180e6d0018 # v2.1.0
+        uses: actions/attest-build-provenance@a2bbfa25375fe432b6a289bc6b6cd05ecd0c4c32 # v2.1.0
         with:
           subject-path: dotpack-darwin-${{ matrix.arch }}.tar.gz
 
@@ -83,7 +83,7 @@ jobs:
   upload-installer:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
       - name: Upload install script
         env:

@@ -1,0 +1,93 @@
+name: Build & Release
+
+on:
+  release:
+    types: [created]
+
+permissions:
+  contents: write
+  id-token: write       # cosign keyless signing
+  attestations: write   # SLSA provenance
+
+jobs:
+  linux:
+    strategy:
+      matrix:
+        include:
+          - runner: ubuntu-latest
+            arch: x86_64
+          - runner: ubuntu-24.04-arm
+            arch: aarch64
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Build Linux bundle
+        run: |
+          docker build -t dotpack .
+          docker run --rm dotpack > dotpack-linux-${{ matrix.arch }}.tar.gz
+          ls -lh dotpack-linux-${{ matrix.arch }}.tar.gz
+
+      - name: Generate checksum
+        run: |
+          sha256sum dotpack-linux-${{ matrix.arch }}.tar.gz > dotpack-linux-${{ matrix.arch }}.tar.gz.sha256
+
+      - name: Attest build provenance
+        uses: actions/attest-build-provenance@ef244123eb79f2f7a7e75d99086184180e6d0018 # v2.1.0
+        with:
+          subject-path: dotpack-linux-${{ matrix.arch }}.tar.gz
+
+      - name: Upload release assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release upload "${{ github.event.release.tag_name }}" \
+            dotpack-linux-${{ matrix.arch }}.tar.gz \
+            dotpack-linux-${{ matrix.arch }}.tar.gz.sha256
+
+  darwin:
+    strategy:
+      matrix:
+        include:
+          - runner: macos-13
+            arch: x86_64
+          - runner: macos-14
+            arch: arm64
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Build Darwin bundle
+        run: |
+          chmod +x dotpack
+          ./dotpack build --os darwin --arch ${{ matrix.arch }}
+          ls -lh dotpack-darwin-${{ matrix.arch }}.tar.gz
+
+      - name: Generate checksum
+        run: |
+          shasum -a 256 dotpack-darwin-${{ matrix.arch }}.tar.gz > dotpack-darwin-${{ matrix.arch }}.tar.gz.sha256
+
+      - name: Attest build provenance
+        uses: actions/attest-build-provenance@ef244123eb79f2f7a7e75d99086184180e6d0018 # v2.1.0
+        with:
+          subject-path: dotpack-darwin-${{ matrix.arch }}.tar.gz
+
+      - name: Upload release assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release upload "${{ github.event.release.tag_name }}" \
+            dotpack-darwin-${{ matrix.arch }}.tar.gz \
+            dotpack-darwin-${{ matrix.arch }}.tar.gz.sha256
+
+  upload-installer:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Upload install script
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release upload "${{ github.event.release.tag_name }}" \
+            scripts/install.sh

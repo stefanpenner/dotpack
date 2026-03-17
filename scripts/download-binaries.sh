@@ -26,18 +26,36 @@ esac
 case "$OS" in
   linux)
     RUST_TARGET="${RUST_ARCH}-unknown-linux-musl"
+    # ripgrep and delta don't ship aarch64 musl builds
+    RUST_TARGET_GNU="${RUST_ARCH}-unknown-linux-gnu"
     LAZYGIT_OS=Linux
     NVIM_OS=linux
     JQ_OS=linux
     ;;
   darwin)
     RUST_TARGET="${RUST_ARCH}-apple-darwin"
+    RUST_TARGET_GNU="${RUST_TARGET}"  # not needed on Mac
     LAZYGIT_OS=Darwin
     NVIM_OS=macos
     JQ_OS=macos
     ;;
   *) echo "Unsupported OS: $OS" >&2; exit 1 ;;
 esac
+
+# Some Rust projects only publish musl for x86_64
+rust_target_for() {
+  local project=$1
+  case "$project" in
+    ripgrep|delta)
+      if [ "$OS" = "linux" ] && [ "$RUST_ARCH" = "aarch64" ]; then
+        echo "$RUST_TARGET_GNU"
+      else
+        echo "$RUST_TARGET"
+      fi
+      ;;
+    *) echo "$RUST_TARGET" ;;
+  esac
+}
 
 dl() {
   local url=$1 dest=$2
@@ -60,8 +78,8 @@ echo "==> Downloading binaries ($OS/$ARCH)"
 dl_tar "https://github.com/sharkdp/fd/releases/download/v${FD_VERSION}/fd-v${FD_VERSION}-${RUST_TARGET}.tar.gz" fd
 dl_tar "https://github.com/sharkdp/bat/releases/download/v${BAT_VERSION}/bat-v${BAT_VERSION}-${RUST_TARGET}.tar.gz" bat
 dl_tar "https://github.com/lsd-rs/lsd/releases/download/v${LSD_VERSION}/lsd-v${LSD_VERSION}-${RUST_TARGET}.tar.gz" lsd
-dl_tar "https://github.com/BurntSushi/ripgrep/releases/download/${RG_VERSION}/ripgrep-${RG_VERSION}-${RUST_TARGET}.tar.gz" rg
-dl_tar "https://github.com/dandavison/delta/releases/download/${DELTA_VERSION}/delta-${DELTA_VERSION}-${RUST_TARGET}.tar.gz" delta
+dl_tar "https://github.com/BurntSushi/ripgrep/releases/download/${RG_VERSION}/ripgrep-${RG_VERSION}-$(rust_target_for ripgrep).tar.gz" rg
+dl_tar "https://github.com/dandavison/delta/releases/download/${DELTA_VERSION}/delta-${DELTA_VERSION}-$(rust_target_for delta).tar.gz" delta
 
 # --- Go tools (static) ---
 dl_tar "https://github.com/junegunn/fzf/releases/download/v${FZF_VERSION}/fzf-${FZF_VERSION}-${OS}_${GOARCH}.tar.gz" fzf

@@ -37,7 +37,8 @@ RUN curl -fsSL "https://github.com/git/git/archive/refs/tags/v${GIT_VERSION}.tar
     echo "LDFLAGS = -static -Wl,--allow-multiple-definition" >> config.mak && \
     make -j$(nproc) && \
     make install && \
-    strip /opt/git/bin/git /opt/git/bin/git-remote-http*
+    strip /opt/git/bin/git && \
+    find /opt/git/libexec -type f -executable -exec strip {} +
 
 # ============================================================
 # zsh — static with essential modules

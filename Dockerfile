@@ -38,7 +38,7 @@ RUN curl -fsSL "https://github.com/git/git/archive/refs/tags/v${GIT_VERSION}.tar
     make -j$(nproc) && \
     make install && \
     strip /opt/git/bin/git && \
-    find /opt/git/libexec -type f -executable -exec strip {} +
+    find /opt/git/libexec -type f -name 'git*' | while read f; do file "$f" | grep -q ELF && strip "$f" || true; done
 
 # ============================================================
 # zsh — static with essential modules

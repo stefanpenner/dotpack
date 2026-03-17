@@ -44,8 +44,8 @@ RUN curl -fsSL "https://github.com/git/git/archive/refs/tags/v${GIT_VERSION}.tar
 # zsh — static with essential modules
 # ============================================================
 FROM base AS zsh-build
-ARG ZSH_VERSION=5.9
-RUN git clone --depth 1 --branch zsh-${ZSH_VERSION} https://github.com/zsh-users/zsh.git && \
+# Use latest master — zsh-5.9 has termcap conflicts with newer ncurses
+RUN git clone --depth 1 https://github.com/zsh-users/zsh.git && \
     cd zsh && \
     ./Util/preconfig && \
     ./configure \

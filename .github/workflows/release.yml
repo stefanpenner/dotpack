@@ -33,6 +33,7 @@ jobs:
           sha256sum dotpack-linux-${{ matrix.arch }}.tar.gz > dotpack-linux-${{ matrix.arch }}.tar.gz.sha256
 
       - name: Attest build provenance
+        if: ${{ github.event.repository.visibility == 'public' }}
         uses: actions/attest-build-provenance@a2bbfa25375fe432b6a289bc6b6cd05ecd0c4c32 # v2.1.0
         with:
           subject-path: dotpack-linux-${{ matrix.arch }}.tar.gz
@@ -68,6 +69,7 @@ jobs:
           shasum -a 256 dotpack-darwin-${{ matrix.arch }}.tar.gz > dotpack-darwin-${{ matrix.arch }}.tar.gz.sha256
 
       - name: Attest build provenance
+        if: ${{ github.event.repository.visibility == 'public' }}
         uses: actions/attest-build-provenance@a2bbfa25375fe432b6a289bc6b6cd05ecd0c4c32 # v2.1.0
         with:
           subject-path: dotpack-darwin-${{ matrix.arch }}.tar.gz

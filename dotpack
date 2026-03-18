@@ -47,7 +47,7 @@ cmd_build() {
     out="$(mktemp -d)"
     bash "$SCRIPT_DIR/scripts/download-binaries.sh" "$out" darwin "$arch"
     # Generate checksums
-    find "$out" -type f -executable | sort | xargs shasum -a 256 > "$out/SHA256SUMS"
+    find "$out" -type f -perm +111 | sort | xargs shasum -a 256 > "$out/SHA256SUMS"
     tar czf "$SCRIPT_DIR/dotpack-darwin-${arch}.tar.gz" -C "$out" .
     rm -rf "$out"
     ls -lh "$SCRIPT_DIR/dotpack-darwin-${arch}.tar.gz"

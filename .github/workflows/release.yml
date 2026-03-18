@@ -51,8 +51,6 @@ jobs:
       matrix:
         include:
           - runner: macos-14
-            arch: x86_64
-          - runner: macos-14
             arch: arm64
     runs-on: ${{ matrix.runner }}
     steps:

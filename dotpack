@@ -83,12 +83,18 @@ cmd_push() {
   ssh "$host" 'mkdir -p ~/.local/bin'
   cat "$tarball" | ssh "$host" 'tar xzf - -C ~/.local'
 
-  # Ensure PATH is configured (idempotent)
+  # Ensure PATH and env are configured (idempotent)
   if ! ssh "$host" 'grep -q "dotpack managed PATH" ~/.profile 2>/dev/null'; then
     ssh "$host" 'cat >> ~/.profile' <<'PROFILE'
 
 # dotpack managed PATH
 export PATH="$HOME/.local/bin:$HOME/.local/git/bin:$HOME/.local/zsh/bin:$HOME/.local/go/bin:$PATH"
+export GIT_EXEC_PATH="$HOME/.local/git/libexec/git-core"
+# SSL certs — pick the first existing cert bundle
+for _cert in /etc/ssl/certs/ca-certificates.crt /etc/ssl/cert.pem /etc/pki/tls/certs/ca-bundle.crt; do
+  [ -f "$_cert" ] && export GIT_SSL_CAINFO="$_cert" && break
+done
+unset _cert
 PROFILE
   fi
 

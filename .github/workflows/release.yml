@@ -24,6 +24,10 @@ jobs:
           - goos: darwin
             goarch: arm64
             name: darwin-arm64
+          - goos: windows
+            goarch: amd64
+            name: windows-x86_64
+            ext: .exe
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -36,14 +40,14 @@ jobs:
         run: |
           GOOS=${{ matrix.goos }} GOARCH=${{ matrix.goarch }} \
             go build -ldflags "-s -w -X main.Version=${{ github.event.release.tag_name }}" \
-            -o dotpack-${{ matrix.name }} .
+            -o dotpack-${{ matrix.name }}${{ matrix.ext }} .
 
       - name: Upload CLI binary
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh release upload "${{ github.event.release.tag_name }}" \
-            dotpack-${{ matrix.name }}
+            dotpack-${{ matrix.name }}${{ matrix.ext }}
 
   # Build Linux tool bundles (Docker multi-stage)
   linux:
@@ -142,14 +146,83 @@ jobs:
             dotpack-darwin-${{ matrix.arch }}.tar.gz \
             dotpack-darwin-${{ matrix.arch }}.tar.gz.sha256
 
+  # Build Windows tool bundle
+  windows:
+    needs: dotpack-cli
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v5.5.0
+        with:
+          go-version-file: go.mod
+
+      - name: Build dotpack CLI
+        run: |
+          go build -ldflags "-s -w -X main.Version=${{ github.event.release.tag_name }}" -o dotpack.exe .
+
+      - name: Build Windows bundle
+        run: |
+          .\dotpack.exe build --os windows --arch x86_64
+          Get-ChildItem dotpack-windows-x86_64.zip
+
+      - name: Generate checksum
+        run: |
+          $hash = (Get-FileHash -Path dotpack-windows-x86_64.zip -Algorithm SHA256).Hash.ToLower()
+          "$hash  dotpack-windows-x86_64.zip" | Out-File -FilePath dotpack-windows-x86_64.zip.sha256 -Encoding ascii -NoNewline
+
+      - name: Attest build provenance
+        if: ${{ github.event.repository.visibility == 'public' }}
+        uses: actions/attest-build-provenance@a2bbfa25375fe432b6a289bc6b6cd05ecd0c4c32 # v2.1.0
+        with:
+          subject-path: dotpack-windows-x86_64.zip
+
+      - name: Upload release assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          gh release upload "${{ github.event.release.tag_name }}" \
+            dotpack-windows-x86_64.zip \
+            dotpack-windows-x86_64.zip.sha256
+
+  # CI tests — verify the CLI builds and runs on all platforms
+  test:
+    strategy:
+      matrix:
+        include:
+          - runner: ubuntu-latest
+            goos: linux
+          - runner: macos-14
+            goos: darwin
+          - runner: windows-latest
+            goos: windows
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v5.5.0
+        with:
+          go-version-file: go.mod
+
+      - name: Build
+        run: go build -ldflags "-s -w -X main.Version=test" -o dotpack${{ matrix.goos == 'windows' && '.exe' || '' }} .
+
+      - name: Smoke test
+        shell: bash
+        run: |
+          ./dotpack${{ matrix.goos == 'windows' && '.exe' || '' }} version
+          ./dotpack${{ matrix.goos == 'windows' && '.exe' || '' }} versions
+
   upload-installer:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
-      - name: Upload install script
+      - name: Upload install scripts
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh release upload "${{ github.event.release.tag_name }}" \
-            scripts/install.sh
+            scripts/install.sh \
+            scripts/install.ps1

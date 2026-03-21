@@ -1,0 +1,37 @@
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+
+jobs:
+  test:
+    strategy:
+      matrix:
+        include:
+          - runner: ubuntu-latest
+            goos: linux
+          - runner: macos-14
+            goos: darwin
+          - runner: windows-latest
+            goos: windows
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v5.5.0
+        with:
+          go-version-file: go.mod
+
+      - name: Build
+        run: go build -ldflags "-s -w -X main.Version=test" -o dotpack${{ matrix.goos == 'windows' && '.exe' || '' }} .
+
+      - name: Smoke test
+        shell: bash
+        run: |
+          ./dotpack${{ matrix.goos == 'windows' && '.exe' || '' }} version
+          ./dotpack${{ matrix.goos == 'windows' && '.exe' || '' }} versions
+
+      - name: Go tests
+        run: go test ./...

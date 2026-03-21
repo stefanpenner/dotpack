@@ -23,24 +23,47 @@ func Install(scriptDir string) error {
 		}
 	}
 
-	tarball := filepath.Join(scriptDir, fmt.Sprintf("dotpack-%s-%s.tar.gz", osName, arch))
-	if _, err := os.Stat(tarball); os.IsNotExist(err) {
-		return fmt.Errorf("no bundle found at %s\nRun: dotpack build --os %s --arch %s", tarball, osName, arch)
+	ext := "tar.gz"
+	if osName == "windows" {
+		ext = "zip"
 	}
 
-	prefix := os.Getenv("DOTPACK_PREFIX")
-	if prefix == "" {
-		home, _ := os.UserHomeDir()
-		prefix = filepath.Join(home, ".local")
+	bundle := filepath.Join(scriptDir, fmt.Sprintf("dotpack-%s-%s.%s", osName, arch, ext))
+	if _, err := os.Stat(bundle); os.IsNotExist(err) {
+		return fmt.Errorf("no bundle found at %s\nRun: dotpack build --os %s --arch %s", bundle, osName, arch)
 	}
+
+	prefix := defaultPrefix()
 
 	fmt.Printf("==> Installing to %s...\n", prefix)
 	if err := os.MkdirAll(prefix, 0755); err != nil {
 		return err
 	}
-	if err := archive.ExtractTarGz(tarball, prefix); err != nil {
+
+	var err error
+	if ext == "zip" {
+		err = archive.ExtractZip(bundle, prefix)
+	} else {
+		err = archive.ExtractTarGz(bundle, prefix)
+	}
+	if err != nil {
 		return fmt.Errorf("extract: %w", err)
 	}
-	fmt.Printf("==> Done. Ensure PATH includes %s/bin\n", prefix)
+	fmt.Printf("==> Done. Ensure PATH includes %s%cbin\n", prefix, filepath.Separator)
 	return nil
+}
+
+// defaultPrefix returns the install location from DOTPACK_PREFIX or the platform default.
+func defaultPrefix() string {
+	if p := os.Getenv("DOTPACK_PREFIX"); p != "" {
+		return p
+	}
+	home, _ := os.UserHomeDir()
+	if runtime.GOOS == "windows" {
+		if localAppData := os.Getenv("LOCALAPPDATA"); localAppData != "" {
+			return filepath.Join(localAppData, "dotpack")
+		}
+		return filepath.Join(home, "AppData", "Local", "dotpack")
+	}
+	return filepath.Join(home, ".local")
 }

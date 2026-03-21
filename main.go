@@ -35,13 +35,15 @@ Commands:
   versions                        Print bundled tool versions
 
 Options:
-  OS defaults to linux for Docker builds, current OS for local
+  OS: linux, darwin, or windows (default: linux for Docker builds)
   ARCH defaults to current machine architecture
-  DOTPACK_PREFIX env var controls install location (default ~/.local)
+  DOTPACK_PREFIX env var controls install location
+    (default: ~/.local on unix, %LOCALAPPDATA%\dotpack on Windows)
 
 Examples:
   dotpack build                   Build for linux/current-arch
   dotpack build --os darwin       Build for darwin/current-arch
+  dotpack build --os windows      Build for windows/current-arch
   dotpack push nas                Deploy to NAS
   dotpack status nas              Check versions on NAS
   dotpack install                 Install locally

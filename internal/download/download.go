@@ -150,42 +150,157 @@ func TarGzFull(url, outputDir string, stripComponents int) error {
 	return nil
 }
 
+// ZipBinary downloads a .zip and extracts a single named binary.
+func ZipBinary(url, outputDir, binaryName string) error {
+	fmt.Printf("  %s\n", binaryName)
+
+	tmp, err := downloadToTemp(url, "dotpack-*.zip")
+	if err != nil {
+		return err
+	}
+	defer os.Remove(tmp)
+
+	info, err := os.Stat(tmp)
+	if err != nil {
+		return err
+	}
+
+	f, err := os.Open(tmp)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+
+	r, err := zip.NewReader(f, info.Size())
+	if err != nil {
+		return err
+	}
+
+	for _, zf := range r.File {
+		if zf.FileInfo().IsDir() {
+			continue
+		}
+		if filepath.Base(zf.Name) == binaryName {
+			rc, err := zf.Open()
+			if err != nil {
+				return err
+			}
+			dest := filepath.Join(outputDir, binaryName)
+			out, err := os.OpenFile(dest, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0755)
+			if err != nil {
+				rc.Close()
+				return err
+			}
+			_, err = io.Copy(out, rc)
+			rc.Close()
+			out.Close()
+			return err
+		}
+	}
+	return fmt.Errorf("%s not found in %s", binaryName, url)
+}
+
+// ZipFull downloads a .zip and extracts everything to outputDir.
+// If stripComponents > 0, it strips that many leading path components.
+func ZipFull(url, outputDir string, stripComponents int) error {
+	tmp, err := downloadToTemp(url, "dotpack-*.zip")
+	if err != nil {
+		return err
+	}
+	defer os.Remove(tmp)
+
+	info, err := os.Stat(tmp)
+	if err != nil {
+		return err
+	}
+
+	f, err := os.Open(tmp)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+
+	r, err := zip.NewReader(f, info.Size())
+	if err != nil {
+		return err
+	}
+
+	for _, zf := range r.File {
+		name := zf.Name
+		if stripComponents > 0 {
+			parts := strings.SplitN(name, "/", stripComponents+1)
+			if len(parts) <= stripComponents {
+				continue
+			}
+			name = parts[stripComponents]
+			if name == "" {
+				continue
+			}
+		}
+
+		target := filepath.Join(outputDir, name)
+
+		if zf.FileInfo().IsDir() {
+			if err := os.MkdirAll(target, 0755); err != nil {
+				return err
+			}
+			continue
+		}
+
+		if err := os.MkdirAll(filepath.Dir(target), 0755); err != nil {
+			return err
+		}
+
+		rc, err := zf.Open()
+		if err != nil {
+			return err
+		}
+		out, err := os.OpenFile(target, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, zf.Mode()|0755)
+		if err != nil {
+			rc.Close()
+			return err
+		}
+		_, err = io.Copy(out, rc)
+		rc.Close()
+		out.Close()
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // ZipFiles downloads a .zip and extracts specified files.
 // fileMap maps archive paths (relative) to destination paths (absolute).
 func ZipFiles(url string, fileMap map[string]string) error {
-	// Zip requires seeking, so download to temp file first
-	tmp, err := os.CreateTemp("", "dotpack-*.zip")
+	tmp, err := downloadToTemp(url, "dotpack-*.zip")
 	if err != nil {
 		return err
 	}
-	defer os.Remove(tmp.Name())
-	defer tmp.Close()
+	defer os.Remove(tmp)
 
-	resp, err := http.Get(url)
-	if err != nil {
-		return fmt.Errorf("download %s: %w", url, err)
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != 200 {
-		return fmt.Errorf("download %s: HTTP %d", url, resp.StatusCode)
-	}
-
-	size, err := io.Copy(tmp, resp.Body)
+	info, err := os.Stat(tmp)
 	if err != nil {
 		return err
 	}
 
-	r, err := zip.NewReader(tmp, size)
+	f, err := os.Open(tmp)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+
+	r, err := zip.NewReader(f, info.Size())
 	if err != nil {
 		return err
 	}
 
-	for _, f := range r.File {
-		dest, ok := fileMap[f.Name]
+	for _, zf := range r.File {
+		dest, ok := fileMap[zf.Name]
 		if !ok {
 			continue
 		}
-		rc, err := f.Open()
+		rc, err := zf.Open()
 		if err != nil {
 			return err
 		}
@@ -193,7 +308,7 @@ func ZipFiles(url string, fileMap map[string]string) error {
 			rc.Close()
 			return err
 		}
-		out, err := os.OpenFile(dest, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, f.Mode()|0755)
+		out, err := os.OpenFile(dest, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, zf.Mode()|0755)
 		if err != nil {
 			rc.Close()
 			return err
@@ -232,4 +347,33 @@ func TarGzToDir(url, destDir string) error {
 		return os.Rename(tmp, destDir)
 	}
 	return os.Rename(filepath.Join(tmp, entries[0].Name()), destDir)
+}
+
+// downloadToTemp downloads a URL to a temporary file and returns the path.
+func downloadToTemp(url, pattern string) (string, error) {
+	tmp, err := os.CreateTemp("", pattern)
+	if err != nil {
+		return "", err
+	}
+
+	resp, err := http.Get(url)
+	if err != nil {
+		tmp.Close()
+		os.Remove(tmp.Name())
+		return "", fmt.Errorf("download %s: %w", url, err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != 200 {
+		tmp.Close()
+		os.Remove(tmp.Name())
+		return "", fmt.Errorf("download %s: HTTP %d", url, resp.StatusCode)
+	}
+
+	_, err = io.Copy(tmp, resp.Body)
+	tmp.Close()
+	if err != nil {
+		os.Remove(tmp.Name())
+		return "", err
+	}
+	return tmp.Name(), nil
 }

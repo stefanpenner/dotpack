@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"runtime"
+	"strings"
 
 	"github.com/stefanpenner/dotpack/internal/ssh"
 )
@@ -34,6 +36,9 @@ const statusScript = `
 func Status(host string) error {
 	if host == "" {
 		fmt.Println("==> Versions (local):")
+		if runtime.GOOS == "windows" {
+			return statusNative()
+		}
 		cmd := exec.Command("sh", "-c", statusScript)
 		cmd.Stdout = os.Stdout
 		cmd.Stderr = os.Stderr
@@ -42,4 +47,42 @@ func Status(host string) error {
 
 	fmt.Printf("==> Versions on %s:\n", host)
 	return ssh.RunInteractive(host, statusScript)
+}
+
+// statusNative checks tool versions using Go exec (no shell required).
+func statusNative() error {
+	tools := []struct {
+		name string
+		args []string
+	}{
+		{"nvim", []string{"--version"}},
+		{"go", []string{"version"}},
+		{"fzf", []string{"--version"}},
+		{"fd", []string{"--version"}},
+		{"bat", []string{"--version"}},
+		{"rg", []string{"--version"}},
+		{"lsd", []string{"--version"}},
+		{"delta", []string{"--version"}},
+		{"jq", []string{"--version"}},
+		{"direnv", []string{"--version"}},
+		{"lazygit", []string{"--version"}},
+		{"dotpack", []string{"version"}},
+	}
+
+	for _, t := range tools {
+		path, err := exec.LookPath(t.name)
+		if err != nil {
+			fmt.Printf("  %-10s (not installed)\n", t.name)
+			continue
+		}
+		_ = path
+		out, err := exec.Command(t.name, t.args...).CombinedOutput()
+		if err != nil {
+			fmt.Printf("  %-10s (error)\n", t.name)
+			continue
+		}
+		ver := strings.TrimSpace(strings.SplitN(string(out), "\n", 2)[0])
+		fmt.Printf("  %-10s %s\n", t.name, ver)
+	}
+	return nil
 }

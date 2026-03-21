@@ -6,7 +6,6 @@ import (
 	"io"
 	"net/http"
 	"os"
-	"path/filepath"
 	"runtime"
 	"strings"
 
@@ -15,11 +14,7 @@ import (
 
 // Upgrade downloads the latest release and installs it.
 func Upgrade(currentVersion string) error {
-	prefix := os.Getenv("DOTPACK_PREFIX")
-	if prefix == "" {
-		home, _ := os.UserHomeDir()
-		prefix = filepath.Join(home, ".local")
-	}
+	prefix := defaultPrefix()
 
 	osName := strings.ToLower(runtime.GOOS)
 	arch := runtime.GOARCH
@@ -30,6 +25,11 @@ func Upgrade(currentVersion string) error {
 		if osName == "linux" {
 			arch = "aarch64"
 		}
+	}
+
+	ext := "tar.gz"
+	if osName == "windows" {
+		ext = "zip"
 	}
 
 	// Fetch latest release info from GitHub
@@ -47,8 +47,8 @@ func Upgrade(currentVersion string) error {
 
 	fmt.Printf("==> Upgrading %s → %s\n", currentVersion, latestTag)
 
-	// Download the bundle tarball
-	assetName := fmt.Sprintf("dotpack-%s-%s.tar.gz", osName, arch)
+	// Download the bundle
+	assetName := fmt.Sprintf("dotpack-%s-%s.%s", osName, arch, ext)
 	var downloadURL string
 	for _, asset := range release.Assets {
 		if asset.Name == assetName {
@@ -66,7 +66,7 @@ func Upgrade(currentVersion string) error {
 	}
 
 	fmt.Printf("==> Downloading %s...\n", assetName)
-	tmp, err := os.CreateTemp("", "dotpack-upgrade-*.tar.gz")
+	tmp, err := os.CreateTemp("", "dotpack-upgrade-*."+ext)
 	if err != nil {
 		return err
 	}
@@ -95,8 +95,15 @@ func Upgrade(currentVersion string) error {
 	if err := os.MkdirAll(prefix, 0755); err != nil {
 		return err
 	}
-	if err := archive.ExtractTarGz(tmp.Name(), prefix); err != nil {
-		return fmt.Errorf("extract: %w", err)
+
+	if ext == "zip" {
+		if err := archive.ExtractZip(tmp.Name(), prefix); err != nil {
+			return fmt.Errorf("extract: %w", err)
+		}
+	} else {
+		if err := archive.ExtractTarGz(tmp.Name(), prefix); err != nil {
+			return fmt.Errorf("extract: %w", err)
+		}
 	}
 
 	fmt.Printf("==> Upgraded to %s\n", latestTag)

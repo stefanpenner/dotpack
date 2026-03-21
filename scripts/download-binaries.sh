@@ -53,6 +53,14 @@ rust_target_for() {
         echo "$RUST_TARGET"
       fi
       ;;
+    dust)
+      # dust doesn't ship aarch64-apple-darwin; use x86_64 via Rosetta
+      if [ "$OS" = "darwin" ] && [ "$RUST_ARCH" = "aarch64" ]; then
+        echo "x86_64-apple-darwin"
+      else
+        echo "$RUST_TARGET"
+      fi
+      ;;
     *) echo "$RUST_TARGET" ;;
   esac
 }
@@ -72,6 +80,15 @@ dl_tar() {
   rm -rf "$tmp"
 }
 
+dl_tbz() {
+  local url=$1 binary=$2
+  local tmp; tmp=$(mktemp -d)
+  echo "  $binary"
+  curl -fsSL "$url" | tar xj -C "$tmp"
+  find "$tmp" -name "$binary" -type f -exec cp {} "$OUT/bin/$binary" \;
+  rm -rf "$tmp"
+}
+
 echo "==> Downloading binaries ($OS/$ARCH)"
 
 # --- Rust tools (musl for Linux, apple-darwin for Mac) ---
@@ -80,10 +97,16 @@ dl_tar "https://github.com/sharkdp/bat/releases/download/v${BAT_VERSION}/bat-v${
 dl_tar "https://github.com/lsd-rs/lsd/releases/download/v${LSD_VERSION}/lsd-v${LSD_VERSION}-${RUST_TARGET}.tar.gz" lsd
 dl_tar "https://github.com/BurntSushi/ripgrep/releases/download/${RG_VERSION}/ripgrep-${RG_VERSION}-$(rust_target_for ripgrep).tar.gz" rg
 dl_tar "https://github.com/dandavison/delta/releases/download/${DELTA_VERSION}/delta-${DELTA_VERSION}-$(rust_target_for delta).tar.gz" delta
+dl_tar "https://github.com/bootandy/dust/releases/download/v${DUST_VERSION}/dust-v${DUST_VERSION}-$(rust_target_for dust).tar.gz" dust
 
 # --- Go tools (static) ---
 dl_tar "https://github.com/junegunn/fzf/releases/download/v${FZF_VERSION}/fzf-${FZF_VERSION}-${OS}_${GOARCH}.tar.gz" fzf
 dl_tar "https://github.com/jesseduffield/lazygit/releases/download/v${LAZYGIT_VERSION}/lazygit_${LAZYGIT_VERSION}_${LAZYGIT_OS}_${ARCH_GENERIC}.tar.gz" lazygit
+
+# --- age (encryption tool — two binaries) ---
+AGE_URL="https://github.com/FiloSottile/age/releases/download/v${AGE_VERSION}/age-v${AGE_VERSION}-${OS}-${GOARCH}.tar.gz"
+dl_tar "$AGE_URL" age
+dl_tar "$AGE_URL" age-keygen
 
 # --- Single-binary tools ---
 dl "https://github.com/direnv/direnv/releases/download/v${DIRENV_VERSION}/direnv.${OS}-${GOARCH}" "$OUT/bin/direnv"
@@ -140,6 +163,11 @@ dl_plugin zsh-history-substring-search \
   "https://github.com/zsh-users/zsh-history-substring-search/archive/refs/tags/${ZSH_HISTORY_SUBSTRING_SEARCH_VERSION}.tar.gz"
 dl_plugin powerlevel10k \
   "https://github.com/romkatv/powerlevel10k/archive/refs/tags/${POWERLEVEL10K_VERSION}.tar.gz"
+
+# --- btop (Linux-only, .tbz format) ---
+if [ "$OS" = "linux" ]; then
+  dl_tbz "https://github.com/aristocratos/btop/releases/download/v${BTOP_VERSION}/btop-${RUST_TARGET}.tbz" btop
+fi
 
 chmod +x "$OUT/bin"/*
 echo "==> Done: $(ls "$OUT/bin" | wc -l | tr -d ' ') binaries + nvim + go + plugins"

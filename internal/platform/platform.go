@@ -82,7 +82,7 @@ func (p *Platform) IsWindows() bool {
 func (p *Platform) SkipTool(name string) bool {
 	if p.OS == "windows" {
 		switch name {
-		case "zsh", "git", "batman", "htop":
+		case "zsh", "git", "batman", "htop", "btop":
 			return true
 		}
 	}
@@ -96,6 +96,12 @@ func (p *Platform) RustTargetFor(project string) string {
 	case "ripgrep", "delta":
 		if p.OS == "linux" && p.RustArch == "aarch64" {
 			return p.RustTargetGNU
+		}
+		return p.RustTarget
+	case "dust":
+		// dust doesn't ship aarch64-apple-darwin; use x86_64 via Rosetta
+		if p.OS == "darwin" && p.RustArch == "aarch64" {
+			return "x86_64-apple-darwin"
 		}
 		return p.RustTarget
 	default:

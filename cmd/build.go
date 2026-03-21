@@ -222,11 +222,12 @@ func downloadAll(out string, p *platform.Platform, vers *versions.Versions) erro
 		{"lsd", "lsd-rs/lsd", "lsd-v%s-%s", false},
 		{"rg", "BurntSushi/ripgrep", "ripgrep-%s-%s", true},
 		{"delta", "dandavison/delta", "delta-%s-%s", true},
+		{"dust", "bootandy/dust", "dust-v%s-%s", true},
 	}
 
 	versionKeys := map[string]string{
 		"fd": "FD_VERSION", "bat": "BAT_VERSION", "lsd": "LSD_VERSION",
-		"rg": "RG_VERSION", "delta": "DELTA_VERSION",
+		"rg": "RG_VERSION", "delta": "DELTA_VERSION", "dust": "DUST_VERSION",
 	}
 
 	archiveExt := p.RustArchiveExt()
@@ -242,7 +243,7 @@ func downloadAll(out string, p *platform.Platform, vers *versions.Versions) erro
 		}
 		archiveName := fmt.Sprintf(t.prefix, ver, target)
 		vPrefix := ver
-		if t.name == "fd" || t.name == "bat" || t.name == "lsd" {
+		if t.name == "fd" || t.name == "bat" || t.name == "lsd" || t.name == "dust" {
 			vPrefix = "v" + ver
 		}
 		url := fmt.Sprintf("https://github.com/%s/releases/download/%s/%s.%s", t.repo, vPrefix, archiveName, archiveExt)
@@ -289,6 +290,27 @@ func downloadAll(out string, p *platform.Platform, vers *versions.Versions) erro
 	} else {
 		if err := download.TarGzBinary(lazygitURL, binDir, lazygitBinary); err != nil {
 			return fmt.Errorf("download lazygit: %w", err)
+		}
+	}
+
+	// age (encryption tool — two binaries: age, age-keygen)
+	ageVer := vers.Get("AGE_VERSION")
+	ageExt := "tar.gz"
+	if p.IsWindows() {
+		ageExt = "zip"
+	}
+	ageURL := fmt.Sprintf("https://github.com/FiloSottile/age/releases/download/v%s/age-v%s-%s-%s.%s",
+		ageVer, ageVer, p.OS, p.GoArch, ageExt)
+	for _, ageBin := range []string{"age", "age-keygen"} {
+		binaryName := ageBin + exe
+		if ageExt == "zip" {
+			if err := download.ZipBinary(ageURL, binDir, binaryName); err != nil {
+				return fmt.Errorf("download %s: %w", ageBin, err)
+			}
+		} else {
+			if err := download.TarGzBinary(ageURL, binDir, binaryName); err != nil {
+				return fmt.Errorf("download %s: %w", ageBin, err)
+			}
 		}
 	}
 
@@ -557,7 +579,8 @@ func VersionSummary(vers *versions.Versions) string {
 		{"lsd", "LSD_VERSION"}, {"rg", "RG_VERSION"}, {"delta", "DELTA_VERSION"},
 		{"lazygit", "LAZYGIT_VERSION"}, {"jq", "JQ_VERSION"}, {"direnv", "DIRENV_VERSION"},
 		{"nvim", "NVIM_VERSION"}, {"go", "GO_VERSION"}, {"git", "GIT_VERSION"},
-		{"htop", "HTOP_VERSION"},
+		{"htop", "HTOP_VERSION"}, {"btop", "BTOP_VERSION"}, {"dust", "DUST_VERSION"},
+		{"age", "AGE_VERSION"},
 	}
 	var b strings.Builder
 	for _, k := range keys {

@@ -93,14 +93,17 @@ func buildDarwin(arch string, vers *versions.Versions, scriptDir string) error {
 	for name, target := range symlinks {
 		link := filepath.Join(binDir, name)
 		os.Remove(link)
-		os.Symlink(target, link)
+		if err := os.Symlink(target, link); err != nil {
+			return fmt.Errorf("symlink %s: %w", name, err)
+		}
 	}
 
 	// Copy self into bundle
-	self, err := os.Executable()
-	if err == nil {
+	if self, err := os.Executable(); err == nil {
 		fmt.Println("  dotpack")
-		copyFile(self, filepath.Join(binDir, "dotpack"))
+		if err := copyFile(self, filepath.Join(binDir, "dotpack")); err != nil {
+			return fmt.Errorf("copy dotpack: %w", err)
+		}
 	}
 
 	// Generate checksums
@@ -157,14 +160,15 @@ func buildWindows(arch string, vers *versions.Versions, scriptDir string) error 
 	}
 
 	// Copy self into bundle
-	self, err := os.Executable()
-	if err == nil {
+	if self, err := os.Executable(); err == nil {
 		fmt.Println("  dotpack")
 		destName := "dotpack"
 		if runtime.GOOS == "windows" {
 			destName = "dotpack.exe"
 		}
-		copyFile(self, filepath.Join(binDir, destName))
+		if err := copyFile(self, filepath.Join(binDir, destName)); err != nil {
+			return fmt.Errorf("copy dotpack: %w", err)
+		}
 	}
 
 	// Generate checksums
@@ -437,7 +441,7 @@ func downloadAll(out string, p *platform.Platform, vers *versions.Versions) erro
 
 func generateChecksums(dir string) error {
 	var files []string
-	filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
+	if err := filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
 		if err != nil || info.IsDir() {
 			return err
 		}
@@ -445,7 +449,9 @@ func generateChecksums(dir string) error {
 			files = append(files, path)
 		}
 		return nil
-	})
+	}); err != nil {
+		return fmt.Errorf("walk %s: %w", dir, err)
+	}
 	sort.Strings(files)
 
 	f, err := os.Create(filepath.Join(dir, "SHA256SUMS"))

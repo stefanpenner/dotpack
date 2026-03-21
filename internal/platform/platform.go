@@ -149,11 +149,3 @@ func (p *Platform) GoArchiveExt() string {
 	return "tar.gz"
 }
 
-// BundleFilename returns the bundle filename for this platform.
-func (p *Platform) BundleFilename() string {
-	displayArch := p.ArchGeneric
-	if p.OS == "darwin" {
-		displayArch = p.ArchGeneric // arm64
-	}
-	return fmt.Sprintf("dotpack-%s-%s.%s", p.OS, displayArch, p.BundleExt)
-}

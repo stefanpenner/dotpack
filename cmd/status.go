@@ -70,12 +70,10 @@ func statusNative() error {
 	}
 
 	for _, t := range tools {
-		path, err := exec.LookPath(t.name)
-		if err != nil {
+		if _, err := exec.LookPath(t.name); err != nil {
 			fmt.Printf("  %-10s (not installed)\n", t.name)
 			continue
 		}
-		_ = path
 		out, err := exec.Command(t.name, t.args...).CombinedOutput()
 		if err != nil {
 			fmt.Printf("  %-10s (error)\n", t.name)

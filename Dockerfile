@@ -89,7 +89,8 @@ RUN curl -fsSL "https://github.com/aristocratos/btop/archive/refs/tags/v${BTOP_V
       -DBTOP_GPU=OFF \
       -DBTOP_LTO=ON && \
     cmake --build build -j$(nproc) && \
-    strip build/bin/btop
+    find build -name btop -type f | head -1 | xargs -I{} cp {} /usr/local/bin/btop && \
+    strip /usr/local/bin/btop
 
 # ============================================================
 # neovim — static
@@ -122,7 +123,7 @@ RUN SKIP_NVIM=1 bash /tmp/scripts/download-binaries.sh /staging linux
 COPY --from=git-build /opt/git /staging/git/
 COPY --from=zsh-build /opt/zsh /staging/zsh/
 COPY --from=htop-build /build/htop/htop /staging/bin/htop
-COPY --from=btop-build /build/btop-*/build/bin/btop /staging/bin/btop
+COPY --from=btop-build /usr/local/bin/btop /staging/bin/btop
 COPY --from=nvim-build /opt/nvim /staging/nvim/
 
 # Create wrapper scripts in bin/ (set env vars so tools are self-contained)

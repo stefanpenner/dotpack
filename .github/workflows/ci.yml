@@ -20,7 +20,7 @@ jobs:
         include:
           - runner: ubuntu-latest
             goos: linux
-          - runner: macos-14
+          - runner: macos-15
             goos: darwin
           - runner: windows-latest
             goos: windows
@@ -174,7 +174,7 @@ jobs:
     strategy:
       matrix:
         include:
-          - runner: macos-14
+          - runner: macos-15
             arch: arm64
     runs-on: ${{ matrix.runner }}
     steps:

@@ -2,18 +2,13 @@ package cmd
 
 import (
 	"fmt"
+	"os"
+	"os/exec"
 
 	"github.com/stefanpenner/dotpack/internal/ssh"
 )
 
-// Status shows installed tool versions on a remote host.
-func Status(host string) error {
-	if host == "" {
-		return fmt.Errorf("usage: dotpack status <host>")
-	}
-
-	fmt.Printf("==> Versions on %s:\n", host)
-	return ssh.RunInteractive(host, `
+const statusScript = `
     _dp="${DOTPACK_PREFIX:-$HOME/.local}"
     export PATH="$_dp/bin:$_dp/git/bin:$_dp/zsh/bin:$_dp/go/bin:$PATH"
     for cmd in zsh git nvim go fzf fd bat rg lsd delta jq direnv lazygit htop dotpack; do
@@ -33,5 +28,18 @@ func Status(host string) error {
         printf "  %-10s (not installed)\n" "$cmd"
       fi
     done
-  `)
+`
+
+// Status shows installed tool versions on a host, or locally if no host given.
+func Status(host string) error {
+	if host == "" {
+		fmt.Println("==> Versions (local):")
+		cmd := exec.Command("sh", "-c", statusScript)
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
+		return cmd.Run()
+	}
+
+	fmt.Printf("==> Versions on %s:\n", host)
+	return ssh.RunInteractive(host, statusScript)
 }

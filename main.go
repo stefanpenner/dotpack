@@ -30,6 +30,7 @@ Commands:
   status <host>                   Show installed tool versions on host
   install                         Install bundle locally (DOTPACK_PREFIX, default ~/.local)
   clean                           Remove build artifacts and Docker image
+  upgrade                         Download and install the latest release
   version                         Print dotpack version
   versions                        Print bundled tool versions
 
@@ -83,6 +84,8 @@ func main() {
 		err = cmd.Install(scriptDir)
 	case "clean":
 		err = cmd.Clean(scriptDir)
+	case "upgrade":
+		err = cmd.Upgrade(Version)
 	case "version":
 		fmt.Println(Version)
 	case "versions":

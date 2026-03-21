@@ -32,6 +32,7 @@ chmod +x dotpack
 ```bash
 dotpack build                    # Build linux bundle (Docker)
 dotpack build --os darwin        # Build macOS bundle
+dotpack build --os darwin --nvim-head  # Build with nvim from HEAD
 dotpack build --os windows       # Build Windows bundle
 dotpack push nas                 # Deploy to remote host via SSH
 dotpack status                   # Check installed versions locally
@@ -61,7 +62,7 @@ dotpack versions                 # Print bundled tool versions
 | direnv | yes | yes | yes |
 | lazygit | yes | yes | yes |
 | htop | yes | yes | — |
-| btop | yes | — | — |
+| btop | yes | yes | — |
 | dust | yes | yes | yes |
 | age | yes | yes | yes |
 | batman | yes | yes | — |
@@ -73,7 +74,9 @@ Also bundles zsh plugins (autosuggestions, fast-syntax-highlighting, history-sub
 
 On **Linux**, all binaries are statically linked against musl libc — they run on any Linux distribution with no shared library dependencies.
 
-On **macOS and Windows**, binaries are downloaded from upstream releases and are **best-effort hermetic**. They don't require Homebrew, apt, or other package managers, but they do link against OS-provided system libraries (e.g. `libSystem.dylib` on macOS, system DLLs on Windows). This is a platform limitation — Apple does not support fully static linking, and Windows binaries universally depend on system DLLs.
+On **macOS**, nvim, htop, and btop are compiled from source for best portability. Rust and Go tools are downloaded as pre-built releases (already statically linked). All macOS binaries are **best-effort hermetic** — they link against `libSystem.dylib` (always present) but have no other external dependencies. Apple does not support fully static linking, so this is the best achievable.
+
+On **Windows**, binaries are downloaded from upstream releases. They don't require package managers but depend on system DLLs.
 
 Some tools require supporting files at runtime (git needs `libexec/`, nvim needs `share/nvim/runtime/`, go needs its SDK, zsh needs function files). These are handled transparently via wrapper scripts in `bin/` that set the correct environment variables (`GIT_EXEC_PATH`, `VIMRUNTIME`, `GOROOT`, `FPATH`) before exec'ing the real binary — no manual configuration needed beyond PATH.
 
@@ -172,4 +175,4 @@ make install           # Install locally
 make test              # Run tests on all platforms
 ```
 
-Requires Go 1.21+ and Docker (for Linux builds only).
+Requires Go 1.21+ and Docker (for Linux builds only). macOS builds compile nvim, htop, and btop from source and require cmake, ninja, autoconf, automake, and libtool (install via `brew install cmake ninja autoconf automake libtool`).

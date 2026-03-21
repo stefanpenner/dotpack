@@ -77,13 +77,28 @@ RUN git clone --depth 1 --branch ${HTOP_VERSION} https://github.com/htop-dev/hto
     strip htop
 
 # ============================================================
+# btop — static
+# ============================================================
+FROM base AS btop-build
+ARG BTOP_VERSION=1.4.6
+RUN curl -fsSL "https://github.com/aristocratos/btop/archive/refs/tags/v${BTOP_VERSION}.tar.gz" | tar xz && \
+    cd btop-${BTOP_VERSION} && \
+    cmake -B build \
+      -DCMAKE_BUILD_TYPE=Release \
+      -DBTOP_STATIC=ON \
+      -DBTOP_GPU=OFF \
+      -DBTOP_LTO=ON && \
+    cmake --build build -j$(nproc) && \
+    strip build/bin/btop
+
+# ============================================================
 # neovim — static
 # ============================================================
 FROM base AS nvim-build
 RUN git clone --depth 1 --branch stable https://github.com/neovim/neovim.git && \
     cd neovim && \
     make CMAKE_BUILD_TYPE=Release \
-         CMAKE_EXTRA_FLAGS="-DCMAKE_INSTALL_PREFIX=/opt/nvim -DCMAKE_EXE_LINKER_FLAGS=-static" \
+         CMAKE_EXTRA_FLAGS="-DCMAKE_INSTALL_PREFIX=/opt/nvim -DCMAKE_EXE_LINKER_FLAGS='-static -Wl,--export-dynamic'" \
          -j$(nproc) && \
     make install && \
     strip /opt/nvim/bin/nvim
@@ -107,6 +122,7 @@ RUN SKIP_NVIM=1 bash /tmp/scripts/download-binaries.sh /staging linux
 COPY --from=git-build /opt/git /staging/git/
 COPY --from=zsh-build /opt/zsh /staging/zsh/
 COPY --from=htop-build /build/htop/htop /staging/bin/htop
+COPY --from=btop-build /build/btop-*/build/bin/btop /staging/bin/btop
 COPY --from=nvim-build /opt/nvim /staging/nvim/
 
 # Create wrapper scripts in bin/ (set env vars so tools are self-contained)
@@ -119,7 +135,7 @@ RUN printf '#!/bin/sh\nPREFIX="$(cd "$(dirname "$0")/.." && pwd)"\nexport GIT_EX
 
 # Verify compiled binaries are static
 RUN echo "==> Verifying static linkage:" && \
-    for f in /staging/git/bin/git /staging/zsh/bin/zsh /staging/bin/htop /staging/nvim/bin/nvim; do \
+    for f in /staging/git/bin/git /staging/zsh/bin/zsh /staging/bin/htop /staging/bin/btop /staging/nvim/bin/nvim; do \
       echo "  $(basename $f): $(file $f | grep -o 'statically linked' || echo 'dynamically linked')"; \
     done
 

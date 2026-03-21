@@ -164,10 +164,5 @@ dl_plugin zsh-history-substring-search \
 dl_plugin powerlevel10k \
   "https://github.com/romkatv/powerlevel10k/archive/refs/tags/${POWERLEVEL10K_VERSION}.tar.gz"
 
-# --- btop (Linux-only, .tbz format) ---
-if [ "$OS" = "linux" ]; then
-  dl_tbz "https://github.com/aristocratos/btop/releases/download/v${BTOP_VERSION}/btop-${RUST_TARGET}.tbz" btop
-fi
-
 chmod +x "$OUT/bin"/*
 echo "==> Done: $(ls "$OUT/bin" | wc -l | tr -d ' ') binaries + nvim + go + plugins"

@@ -24,6 +24,10 @@ jobs:
         with:
           go-version-file: go.mod
 
+      - name: Install build dependencies (macOS)
+        if: matrix.goos == 'darwin'
+        run: brew install cmake ninja autoconf automake libtool
+
       - name: Build
         run: go build -ldflags "-s -w -X main.Version=test" -o dotpack${{ matrix.goos == 'windows' && '.exe' || '' }} .
 
@@ -36,7 +40,7 @@ jobs:
       - name: Go tests
         run: go test ./...
 
-      - name: Build bundle and verify wrappers (macOS)
+      - name: Build bundle and verify (macOS)
         if: matrix.goos == 'darwin'
         shell: bash
         run: |
@@ -62,13 +66,26 @@ jobs:
           grep -q 'GOROOT' /tmp/dotpack-verify/bin/go || { echo "FAIL: go missing GOROOT"; exit 1; }
           grep -q 'GOROOT' /tmp/dotpack-verify/bin/gofmt || { echo "FAIL: gofmt missing GOROOT"; exit 1; }
 
+          echo "==> Verifying source-built tools exist..."
+          test -x /tmp/dotpack-verify/bin/htop || { echo "FAIL: htop not found"; exit 1; }
+          test -x /tmp/dotpack-verify/bin/btop || { echo "FAIL: btop not found"; exit 1; }
+          test -x /tmp/dotpack-verify/nvim/bin/nvim || { echo "FAIL: nvim binary not found"; exit 1; }
+          test -d /tmp/dotpack-verify/nvim/share/nvim/runtime || { echo "FAIL: nvim runtime not found"; exit 1; }
+          echo "  htop: ok"
+          echo "  btop: ok"
+          echo "  nvim: ok (binary + runtime)"
+
           echo "==> Verifying wrappers execute correctly..."
           /tmp/dotpack-verify/bin/go version
           GOROOT_OUT=$(/tmp/dotpack-verify/bin/go env GOROOT)
           echo "  GOROOT=$GOROOT_OUT"
           echo "$GOROOT_OUT" | grep -q '/tmp/dotpack-verify/go' || { echo "FAIL: GOROOT not set correctly"; exit 1; }
 
-          echo "==> All wrapper checks passed."
+          /tmp/dotpack-verify/bin/nvim --version | head -1
+          /tmp/dotpack-verify/bin/htop --version | head -1
+          /tmp/dotpack-verify/bin/btop --version | head -1
+
+          echo "==> All checks passed."
 
       - name: Build bundle and verify wrappers (Windows)
         if: matrix.goos == 'windows'

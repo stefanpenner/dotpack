@@ -119,6 +119,9 @@ jobs:
         with:
           go-version-file: go.mod
 
+      - name: Install build dependencies
+        run: brew install cmake ninja autoconf automake libtool
+
       - name: Build dotpack CLI
         run: |
           go build -ldflags "-s -w -X main.Version=${{ github.event.release.tag_name }}" -o dotpack .

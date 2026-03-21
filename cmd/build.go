@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
 	"sort"
@@ -18,16 +19,25 @@ import (
 	"github.com/stefanpenner/dotpack/internal/versions"
 )
 
+// buildOptions holds flags parsed from the build command line.
+type buildOptions struct {
+	os       string
+	arch     string
+	nvimHead bool // build nvim from HEAD instead of stable/pinned version
+}
+
 // Build builds a dotpack bundle for the given OS and architecture.
 func Build(args []string, vers *versions.Versions, scriptDir string) error {
-	targetOS := "linux"
-	targetArch := runtime.GOARCH
+	opts := buildOptions{
+		os:   "linux",
+		arch: runtime.GOARCH,
+	}
 	// Normalize Go arch to uname style
-	switch targetArch {
+	switch opts.arch {
 	case "amd64":
-		targetArch = "x86_64"
+		opts.arch = "x86_64"
 	case "arm64":
-		targetArch = "aarch64"
+		opts.arch = "aarch64"
 	}
 
 	for i := 0; i < len(args); i++ {
@@ -35,30 +45,32 @@ func Build(args []string, vers *versions.Versions, scriptDir string) error {
 		case "--os":
 			i++
 			if i < len(args) {
-				targetOS = args[i]
+				opts.os = args[i]
 			}
 		case "--arch":
 			i++
 			if i < len(args) {
-				targetArch = args[i]
+				opts.arch = args[i]
 			}
+		case "--nvim-head":
+			opts.nvimHead = true
 		default:
 			return fmt.Errorf("unknown option: %s", args[i])
 		}
 	}
 
-	switch targetOS {
+	switch opts.os {
 	case "darwin":
-		return buildDarwin(targetArch, vers, scriptDir)
+		return buildDarwin(opts, vers, scriptDir)
 	case "windows":
-		return buildWindows(targetArch, vers, scriptDir)
+		return buildWindows(opts.arch, vers, scriptDir)
 	default:
-		return buildLinux(targetArch, scriptDir)
+		return buildLinux(opts.arch, scriptDir)
 	}
 }
 
-func buildDarwin(arch string, vers *versions.Versions, scriptDir string) error {
-	p, err := platform.New("darwin", arch)
+func buildDarwin(opts buildOptions, vers *versions.Versions, scriptDir string) error {
+	p, err := platform.New("darwin", opts.arch)
 	if err != nil {
 		return err
 	}
@@ -80,7 +92,20 @@ func buildDarwin(arch string, vers *versions.Versions, scriptDir string) error {
 
 	fmt.Println("==> Downloading binaries (darwin/" + displayArch + ")")
 
-	if err := downloadAll(out, p, vers); err != nil {
+	// Skip nvim download — we build it from source
+	if err := downloadAll(out, p, vers, map[string]bool{"nvim": true}); err != nil {
+		return err
+	}
+
+	// Build tools from source for best portability
+	fmt.Println("==> Building tools from source...")
+	if err := buildNvim(out, vers, opts.nvimHead); err != nil {
+		return err
+	}
+	if err := buildHtop(binDir, vers); err != nil {
+		return err
+	}
+	if err := buildBtop(binDir, vers); err != nil {
 		return err
 	}
 
@@ -138,7 +163,7 @@ func buildWindows(arch string, vers *versions.Versions, scriptDir string) error 
 
 	fmt.Println("==> Downloading binaries (windows/" + p.ArchGeneric + ")")
 
-	if err := downloadAll(out, p, vers); err != nil {
+	if err := downloadAll(out, p, vers, nil); err != nil {
 		return err
 	}
 
@@ -201,7 +226,189 @@ func buildLinux(arch, scriptDir string) error {
 	return nil
 }
 
-func downloadAll(out string, p *platform.Platform, vers *versions.Versions) error {
+// buildBtop builds btop from source using cmake.
+func buildBtop(binDir string, vers *versions.Versions) error {
+	ver := vers.Get("BTOP_VERSION")
+	fmt.Println("  btop (building from source)")
+
+	srcDir, err := os.MkdirTemp("", "dotpack-btop-*")
+	if err != nil {
+		return err
+	}
+	defer os.RemoveAll(srcDir)
+
+	// Download source tarball
+	url := fmt.Sprintf("https://github.com/aristocratos/btop/archive/refs/tags/v%s.tar.gz", ver)
+	if err := download.TarGzFull(url, srcDir, 0); err != nil {
+		return fmt.Errorf("download btop source: %w", err)
+	}
+
+	// Find extracted directory
+	entries, err := os.ReadDir(srcDir)
+	if err != nil {
+		return err
+	}
+	var srcRoot string
+	for _, e := range entries {
+		if e.IsDir() && strings.HasPrefix(e.Name(), "btop-") {
+			srcRoot = filepath.Join(srcDir, e.Name())
+			break
+		}
+	}
+	if srcRoot == "" {
+		return fmt.Errorf("btop source directory not found")
+	}
+
+	buildDir := filepath.Join(srcRoot, "build")
+
+	// cmake configure
+	configure := exec.Command("cmake", "-B", buildDir, "-S", srcRoot,
+		"-DCMAKE_BUILD_TYPE=Release",
+		"-DBTOP_GPU=OFF",
+		"-DBTOP_LTO=ON",
+	)
+	configure.Stdout = os.Stdout
+	configure.Stderr = os.Stderr
+	if err := configure.Run(); err != nil {
+		return fmt.Errorf("btop cmake configure: %w", err)
+	}
+
+	// cmake build
+	build := exec.Command("cmake", "--build", buildDir, "--config", "Release")
+	build.Stdout = os.Stdout
+	build.Stderr = os.Stderr
+	if err := build.Run(); err != nil {
+		return fmt.Errorf("btop cmake build: %w", err)
+	}
+
+	// Find and copy binary — cmake may place it in build/ or build/bin/
+	btopBin := filepath.Join(buildDir, "btop")
+	if _, err := os.Stat(btopBin); err != nil {
+		btopBin = filepath.Join(buildDir, "bin", "btop")
+	}
+	if err := copyFile(btopBin, filepath.Join(binDir, "btop")); err != nil {
+		return fmt.Errorf("copy btop: %w", err)
+	}
+
+	return nil
+}
+
+// buildNvim builds neovim from source using cmake.
+// If head is true, builds from the latest HEAD of the main branch;
+// otherwise builds the stable tag (or pinned NVIM_VERSION).
+func buildNvim(outDir string, vers *versions.Versions, head bool) error {
+	label := "stable"
+	if head {
+		label = "HEAD"
+	}
+	fmt.Printf("  nvim (building %s from source)\n", label)
+
+	srcDir, err := os.MkdirTemp("", "dotpack-nvim-*")
+	if err != nil {
+		return err
+	}
+	defer os.RemoveAll(srcDir)
+
+	// Clone source
+	cloneArgs := []string{"clone", "--depth", "1"}
+	if head {
+		cloneArgs = append(cloneArgs, "https://github.com/neovim/neovim.git")
+	} else {
+		cloneArgs = append(cloneArgs, "--branch", "stable", "https://github.com/neovim/neovim.git")
+	}
+	srcRoot := filepath.Join(srcDir, "neovim")
+	cloneArgs = append(cloneArgs, srcRoot)
+
+	clone := exec.Command("git", cloneArgs...)
+	clone.Stdout = os.Stdout
+	clone.Stderr = os.Stderr
+	if err := clone.Run(); err != nil {
+		return fmt.Errorf("nvim git clone: %w", err)
+	}
+
+	installDir := filepath.Join(outDir, "nvim")
+
+	// cmake configure + build + install
+	build := exec.Command("make",
+		"CMAKE_BUILD_TYPE=Release",
+		fmt.Sprintf("CMAKE_INSTALL_PREFIX=%s", installDir),
+		fmt.Sprintf("-j%d", runtime.NumCPU()),
+	)
+	build.Dir = srcRoot
+	build.Stdout = os.Stdout
+	build.Stderr = os.Stderr
+	if err := build.Run(); err != nil {
+		return fmt.Errorf("nvim build: %w", err)
+	}
+
+	install := exec.Command("make", "install")
+	install.Dir = srcRoot
+	install.Stdout = os.Stdout
+	install.Stderr = os.Stderr
+	if err := install.Run(); err != nil {
+		return fmt.Errorf("nvim install: %w", err)
+	}
+
+	return nil
+}
+
+// buildHtop builds htop from source using autotools.
+func buildHtop(binDir string, vers *versions.Versions) error {
+	ver := vers.Get("HTOP_VERSION")
+	fmt.Println("  htop (building from source)")
+
+	srcDir, err := os.MkdirTemp("", "dotpack-htop-*")
+	if err != nil {
+		return err
+	}
+	defer os.RemoveAll(srcDir)
+
+	// Clone source at the pinned version
+	srcRoot := filepath.Join(srcDir, "htop")
+	clone := exec.Command("git", "clone", "--depth", "1", "--branch", ver,
+		"https://github.com/htop-dev/htop.git", srcRoot)
+	clone.Stdout = os.Stdout
+	clone.Stderr = os.Stderr
+	if err := clone.Run(); err != nil {
+		return fmt.Errorf("htop git clone: %w", err)
+	}
+
+	// autogen
+	autogen := exec.Command("./autogen.sh")
+	autogen.Dir = srcRoot
+	autogen.Stdout = os.Stdout
+	autogen.Stderr = os.Stderr
+	if err := autogen.Run(); err != nil {
+		return fmt.Errorf("htop autogen: %w", err)
+	}
+
+	// configure
+	configure := exec.Command("./configure", "CFLAGS=-Os -DNDEBUG")
+	configure.Dir = srcRoot
+	configure.Stdout = os.Stdout
+	configure.Stderr = os.Stderr
+	if err := configure.Run(); err != nil {
+		return fmt.Errorf("htop configure: %w", err)
+	}
+
+	// build
+	make := exec.Command("make", fmt.Sprintf("-j%d", runtime.NumCPU()))
+	make.Dir = srcRoot
+	make.Stdout = os.Stdout
+	make.Stderr = os.Stderr
+	if err := make.Run(); err != nil {
+		return fmt.Errorf("htop build: %w", err)
+	}
+
+	// copy binary
+	if err := copyFile(filepath.Join(srcRoot, "htop"), filepath.Join(binDir, "htop")); err != nil {
+		return fmt.Errorf("copy htop: %w", err)
+	}
+
+	return nil
+}
+
+func downloadAll(out string, p *platform.Platform, vers *versions.Versions, skip map[string]bool) error {
 	binDir := filepath.Join(out, "bin")
 	exe := p.ExeSuffix
 
@@ -348,21 +555,23 @@ func downloadAll(out string, p *platform.Platform, vers *versions.Versions) erro
 		fmt.Println("  batman")
 	}
 
-	// Neovim
-	nvimVer := vers.Get("NVIM_VERSION")
-	nvimArchiveName := p.NvimArchiveName(nvimVer)
-	nvimExt := p.NvimArchiveExt()
-	nvimURL := fmt.Sprintf("https://github.com/neovim/neovim/releases/download/v%s/%s.%s",
-		nvimVer, nvimArchiveName, nvimExt)
-	fmt.Println("  nvim")
-	nvimDir := filepath.Join(out, "nvim")
-	if nvimExt == "zip" {
-		if err := download.ZipFull(nvimURL, nvimDir, 1); err != nil {
-			return fmt.Errorf("download nvim: %w", err)
-		}
-	} else {
-		if err := download.TarGzFull(nvimURL, nvimDir, 1); err != nil {
-			return fmt.Errorf("download nvim: %w", err)
+	// Neovim (skip if building from source)
+	if !skip["nvim"] {
+		nvimVer := vers.Get("NVIM_VERSION")
+		nvimArchiveName := p.NvimArchiveName(nvimVer)
+		nvimExt := p.NvimArchiveExt()
+		nvimURL := fmt.Sprintf("https://github.com/neovim/neovim/releases/download/v%s/%s.%s",
+			nvimVer, nvimArchiveName, nvimExt)
+		fmt.Println("  nvim")
+		nvimDir := filepath.Join(out, "nvim")
+		if nvimExt == "zip" {
+			if err := download.ZipFull(nvimURL, nvimDir, 1); err != nil {
+				return fmt.Errorf("download nvim: %w", err)
+			}
+		} else {
+			if err := download.TarGzFull(nvimURL, nvimDir, 1); err != nil {
+				return fmt.Errorf("download nvim: %w", err)
+			}
 		}
 	}
 

@@ -4,8 +4,16 @@ on:
   push:
     branches: [master]
   pull_request:
+  release:
+    types: [created]
+
+permissions:
+  contents: write
+  id-token: write
+  attestations: write
 
 jobs:
+  # Unit tests on all platforms
   test:
     strategy:
       matrix:
@@ -24,11 +32,7 @@ jobs:
         with:
           go-version-file: go.mod
 
-      - name: Install build dependencies (macOS)
-        if: matrix.goos == 'darwin'
-        run: brew install cmake ninja autoconf automake libtool
-
-      - name: Build
+      - name: Build CLI
         run: go build -ldflags "-s -w -X main.Version=test" -o dotpack${{ matrix.goos == 'windows' && '.exe' || '' }} .
 
       - name: Smoke test
@@ -40,76 +44,281 @@ jobs:
       - name: Go tests
         run: go test ./...
 
-      - name: Build bundle and verify (macOS)
-        if: matrix.goos == 'darwin'
-        shell: bash
-        run: |
-          ./dotpack build --os darwin
-          mkdir -p /tmp/dotpack-verify
-          tar xzf dotpack-darwin-*.tar.gz -C /tmp/dotpack-verify
+  # Build dotpack CLI binaries for all platforms
+  cli:
+    strategy:
+      matrix:
+        include:
+          - goos: linux
+            goarch: amd64
+            name: linux-x86_64
+          - goos: linux
+            goarch: arm64
+            name: linux-aarch64
+          - goos: darwin
+            goarch: arm64
+            name: darwin-arm64
+          - goos: windows
+            goarch: amd64
+            name: windows-x86_64
+            ext: .exe
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
-          echo "==> Verifying wrappers are scripts, not symlinks..."
-          for f in nvim go gofmt; do
-            if [ -L "/tmp/dotpack-verify/bin/$f" ]; then
-              echo "FAIL: bin/$f is a symlink, expected wrapper script"
-              exit 1
-            fi
-            if ! head -1 "/tmp/dotpack-verify/bin/$f" | grep -q '#!/bin/sh'; then
-              echo "FAIL: bin/$f missing shebang"
-              exit 1
-            fi
+      - uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v5.5.0
+        with:
+          go-version-file: go.mod
+
+      - name: Build dotpack CLI
+        run: |
+          version="${{ github.event.release.tag_name || 'ci' }}"
+          GOOS=${{ matrix.goos }} GOARCH=${{ matrix.goarch }} \
+            go build -ldflags "-s -w -X main.Version=$version" \
+            -o dotpack-${{ matrix.name }}${{ matrix.ext }} .
+
+      - name: Upload CLI artifact
+        uses: actions/upload-artifact@ea165f8d65b6db9a6b7c67d0a616a1a049d460e3 # v4.6.2
+        with:
+          name: cli-${{ matrix.name }}
+          path: dotpack-${{ matrix.name }}${{ matrix.ext }}
+
+      - name: Upload to release
+        if: github.event_name == 'release'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release upload "${{ github.event.release.tag_name }}" \
+            dotpack-${{ matrix.name }}${{ matrix.ext }}
+
+  # Build Linux tool bundles (Docker)
+  linux:
+    needs: cli
+    strategy:
+      matrix:
+        include:
+          - runner: ubuntu-latest
+            arch: x86_64
+            goarch: amd64
+          - runner: ubuntu-24.04-arm
+            arch: aarch64
+            goarch: arm64
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Download CLI artifact
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: cli-linux-${{ matrix.arch }}
+
+      - name: Build Linux bundle
+        run: |
+          chmod +x dotpack-linux-${{ matrix.arch }}
+          docker build -t dotpack .
+          docker run --rm dotpack > dotpack-linux-${{ matrix.arch }}.tar.gz
+          # Inject dotpack CLI into the bundle
+          tmpdir=$(mktemp -d)
+          tar xzf dotpack-linux-${{ matrix.arch }}.tar.gz -C "$tmpdir"
+          cp dotpack-linux-${{ matrix.arch }} "$tmpdir/bin/dotpack"
+          tar czf dotpack-linux-${{ matrix.arch }}.tar.gz -C "$tmpdir" .
+          rm -rf "$tmpdir"
+          ls -lh dotpack-linux-${{ matrix.arch }}.tar.gz
+
+      - name: Verify bundle
+        run: |
+          mkdir -p /tmp/dotpack-verify
+          tar xzf dotpack-linux-${{ matrix.arch }}.tar.gz -C /tmp/dotpack-verify
+
+          echo "==> Verifying wrappers..."
+          for f in git zsh nvim go gofmt; do
+            head -1 "/tmp/dotpack-verify/bin/$f" | grep -q '#!/bin/sh' || { echo "FAIL: bin/$f not a wrapper"; exit 1; }
             echo "  bin/$f: wrapper ok"
           done
 
-          echo "==> Verifying env vars in wrappers..."
-          grep -q 'VIMRUNTIME' /tmp/dotpack-verify/bin/nvim || { echo "FAIL: nvim missing VIMRUNTIME"; exit 1; }
-          grep -q 'GOROOT' /tmp/dotpack-verify/bin/go || { echo "FAIL: go missing GOROOT"; exit 1; }
-          grep -q 'GOROOT' /tmp/dotpack-verify/bin/gofmt || { echo "FAIL: gofmt missing GOROOT"; exit 1; }
+          echo "==> Verifying static linkage..."
+          for f in git/bin/git zsh/bin/zsh bin/htop bin/btop nvim/bin/nvim; do
+            file "/tmp/dotpack-verify/$f" | grep -q 'statically linked' || { echo "WARN: $f not static"; }
+            echo "  $f: $(file "/tmp/dotpack-verify/$f" | grep -o 'statically linked' || echo 'dynamically linked')"
+          done
 
-          echo "==> Verifying source-built tools exist..."
-          test -x /tmp/dotpack-verify/bin/htop || { echo "FAIL: htop not found"; exit 1; }
-          test -x /tmp/dotpack-verify/bin/btop || { echo "FAIL: btop not found"; exit 1; }
-          test -x /tmp/dotpack-verify/nvim/bin/nvim || { echo "FAIL: nvim binary not found"; exit 1; }
-          test -d /tmp/dotpack-verify/nvim/share/nvim/runtime || { echo "FAIL: nvim runtime not found"; exit 1; }
-          echo "  htop: ok"
-          echo "  btop: ok"
-          echo "  nvim: ok (binary + runtime)"
-
-          echo "==> Verifying wrappers execute correctly..."
+          echo "==> Verifying tools execute..."
           /tmp/dotpack-verify/bin/go version
-          GOROOT_OUT=$(/tmp/dotpack-verify/bin/go env GOROOT)
-          echo "  GOROOT=$GOROOT_OUT"
-          echo "$GOROOT_OUT" | grep -q '/tmp/dotpack-verify/go' || { echo "FAIL: GOROOT not set correctly"; exit 1; }
-
           /tmp/dotpack-verify/bin/nvim --version | head -1
           /tmp/dotpack-verify/bin/htop --version | head -1
           /tmp/dotpack-verify/bin/btop --version | head -1
 
           echo "==> All checks passed."
 
-      - name: Build bundle and verify wrappers (Windows)
-        if: matrix.goos == 'windows'
+      - name: Generate checksum
+        run: sha256sum dotpack-linux-${{ matrix.arch }}.tar.gz > dotpack-linux-${{ matrix.arch }}.tar.gz.sha256
+
+      - name: Attest build provenance
+        if: github.event_name == 'release' && github.event.repository.visibility == 'public'
+        uses: actions/attest-build-provenance@a2bbfa25375fe432b6a289bc6b6cd05ecd0c4c32 # v2.1.0
+        with:
+          subject-path: dotpack-linux-${{ matrix.arch }}.tar.gz
+
+      - name: Upload to release
+        if: github.event_name == 'release'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release upload "${{ github.event.release.tag_name }}" \
+            dotpack-linux-${{ matrix.arch }}.tar.gz \
+            dotpack-linux-${{ matrix.arch }}.tar.gz.sha256
+
+  # Build Darwin tool bundle
+  darwin:
+    needs: cli
+    strategy:
+      matrix:
+        include:
+          - runner: macos-14
+            arch: arm64
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v5.5.0
+        with:
+          go-version-file: go.mod
+
+      - name: Install build dependencies
+        run: brew install cmake ninja autoconf automake libtool
+
+      - name: Build dotpack CLI
+        run: |
+          version="${{ github.event.release.tag_name || 'ci' }}"
+          go build -ldflags "-s -w -X main.Version=$version" -o dotpack .
+
+      - name: Build Darwin bundle
+        run: |
+          ./dotpack build --os darwin --arch ${{ matrix.arch }}
+          ls -lh dotpack-darwin-${{ matrix.arch }}.tar.gz
+
+      - name: Verify bundle
+        run: |
+          mkdir -p /tmp/dotpack-verify
+          tar xzf dotpack-darwin-${{ matrix.arch }}.tar.gz -C /tmp/dotpack-verify
+
+          echo "==> Verifying wrappers..."
+          for f in nvim go gofmt; do
+            test ! -L "/tmp/dotpack-verify/bin/$f" || { echo "FAIL: bin/$f is a symlink"; exit 1; }
+            head -1 "/tmp/dotpack-verify/bin/$f" | grep -q '#!/bin/sh' || { echo "FAIL: bin/$f not a wrapper"; exit 1; }
+            echo "  bin/$f: wrapper ok"
+          done
+
+          echo "==> Verifying env vars..."
+          grep -q 'VIMRUNTIME' /tmp/dotpack-verify/bin/nvim || { echo "FAIL: nvim missing VIMRUNTIME"; exit 1; }
+          grep -q 'GOROOT' /tmp/dotpack-verify/bin/go || { echo "FAIL: go missing GOROOT"; exit 1; }
+
+          echo "==> Verifying source-built tools..."
+          test -x /tmp/dotpack-verify/bin/htop || { echo "FAIL: htop not found"; exit 1; }
+          test -x /tmp/dotpack-verify/bin/btop || { echo "FAIL: btop not found"; exit 1; }
+          test -x /tmp/dotpack-verify/nvim/bin/nvim || { echo "FAIL: nvim not found"; exit 1; }
+          test -d /tmp/dotpack-verify/nvim/share/nvim/runtime || { echo "FAIL: nvim runtime not found"; exit 1; }
+
+          echo "==> Verifying tools execute..."
+          /tmp/dotpack-verify/bin/go version
+          GOROOT_OUT=$(/tmp/dotpack-verify/bin/go env GOROOT)
+          echo "$GOROOT_OUT" | grep -q '/tmp/dotpack-verify/go' || { echo "FAIL: GOROOT wrong"; exit 1; }
+          /tmp/dotpack-verify/bin/nvim --version | head -1
+          /tmp/dotpack-verify/bin/htop --version | head -1
+          /tmp/dotpack-verify/bin/btop --version | head -1
+
+          echo "==> All checks passed."
+
+      - name: Generate checksum
+        run: shasum -a 256 dotpack-darwin-${{ matrix.arch }}.tar.gz > dotpack-darwin-${{ matrix.arch }}.tar.gz.sha256
+
+      - name: Attest build provenance
+        if: github.event_name == 'release' && github.event.repository.visibility == 'public'
+        uses: actions/attest-build-provenance@a2bbfa25375fe432b6a289bc6b6cd05ecd0c4c32 # v2.1.0
+        with:
+          subject-path: dotpack-darwin-${{ matrix.arch }}.tar.gz
+
+      - name: Upload to release
+        if: github.event_name == 'release'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release upload "${{ github.event.release.tag_name }}" \
+            dotpack-darwin-${{ matrix.arch }}.tar.gz \
+            dotpack-darwin-${{ matrix.arch }}.tar.gz.sha256
+
+  # Build Windows tool bundle
+  windows:
+    needs: cli
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v5.5.0
+        with:
+          go-version-file: go.mod
+
+      - name: Build dotpack CLI
+        run: |
+          $version = "${{ github.event.release.tag_name }}"
+          if (-not $version) { $version = "ci" }
+          go build -ldflags "-s -w -X main.Version=$version" -o dotpack.exe .
+
+      - name: Build Windows bundle
+        run: |
+          .\dotpack.exe build --os windows --arch x86_64
+          Get-ChildItem dotpack-windows-x86_64.zip
+
+      - name: Verify bundle
         shell: bash
         run: |
-          ./dotpack.exe build --os windows
           mkdir -p /tmp/dotpack-verify
           unzip -qo dotpack-windows-*.zip -d /tmp/dotpack-verify
 
-          echo "==> Verifying .cmd wrappers exist..."
+          echo "==> Verifying .cmd wrappers..."
           for f in nvim go gofmt; do
-            if [ ! -f "/tmp/dotpack-verify/bin/$f.cmd" ]; then
-              echo "FAIL: bin/$f.cmd not found"
-              exit 1
-            fi
-            if ! grep -q '@echo off' "/tmp/dotpack-verify/bin/$f.cmd"; then
-              echo "FAIL: bin/$f.cmd missing @echo off"
-              exit 1
-            fi
+            test -f "/tmp/dotpack-verify/bin/$f.cmd" || { echo "FAIL: bin/$f.cmd not found"; exit 1; }
+            grep -q '@echo off' "/tmp/dotpack-verify/bin/$f.cmd" || { echo "FAIL: bin/$f.cmd missing @echo off"; exit 1; }
             echo "  bin/$f.cmd: wrapper ok"
           done
 
-          echo "==> Verifying env vars in wrappers..."
           grep -q 'GOROOT' /tmp/dotpack-verify/bin/go.cmd || { echo "FAIL: go.cmd missing GOROOT"; exit 1; }
           grep -q 'VIMRUNTIME' /tmp/dotpack-verify/bin/nvim.cmd || { echo "FAIL: nvim.cmd missing VIMRUNTIME"; exit 1; }
 
-          echo "==> All wrapper checks passed."
+          echo "==> All checks passed."
+
+      - name: Generate checksum
+        run: |
+          $hash = (Get-FileHash -Path dotpack-windows-x86_64.zip -Algorithm SHA256).Hash.ToLower()
+          "$hash  dotpack-windows-x86_64.zip" | Out-File -FilePath dotpack-windows-x86_64.zip.sha256 -Encoding ascii -NoNewline
+
+      - name: Attest build provenance
+        if: github.event_name == 'release' && github.event.repository.visibility == 'public'
+        uses: actions/attest-build-provenance@a2bbfa25375fe432b6a289bc6b6cd05ecd0c4c32 # v2.1.0
+        with:
+          subject-path: dotpack-windows-x86_64.zip
+
+      - name: Upload to release
+        if: github.event_name == 'release'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          gh release upload "${{ github.event.release.tag_name }}" \
+            dotpack-windows-x86_64.zip \
+            dotpack-windows-x86_64.zip.sha256
+
+  # Upload install scripts (release only)
+  upload-installer:
+    if: github.event_name == 'release'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Upload install scripts
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release upload "${{ github.event.release.tag_name }}" \
+            scripts/install.sh \
+            scripts/install.ps1

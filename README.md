@@ -49,7 +49,7 @@ dotpack versions                 # Print bundled tool versions
 | Tool | Linux | macOS | Windows |
 |------|:-----:|:-----:|:-------:|
 | zsh | yes | yes | — |
-| git | yes | yes | — |
+| git | yes | yes | yes |
 | nvim | yes | yes | yes |
 | go | yes | yes | yes |
 | fzf | yes | yes | yes |
@@ -76,7 +76,7 @@ On **Linux**, all binaries are statically linked against musl libc — they run 
 
 On **macOS**, nvim, htop, and btop are compiled from source for best portability. Rust and Go tools are downloaded as pre-built releases (already statically linked). All macOS binaries are **best-effort hermetic** — they link against `libSystem.dylib` (always present) but have no other external dependencies. Apple does not support fully static linking, so this is the best achievable.
 
-On **Windows**, binaries are downloaded from upstream releases. They don't require package managers but depend on system DLLs.
+On **Windows**, binaries are downloaded from upstream releases. Git uses [MinGit](https://github.com/git-for-windows/git) — a portable, self-contained distribution. They don't require package managers but depend on system DLLs.
 
 Some tools require supporting files at runtime (git needs `libexec/`, nvim needs `share/nvim/runtime/`, go needs its SDK, zsh needs function files). These are handled transparently via wrapper scripts in `bin/` that set the correct environment variables (`GIT_EXEC_PATH`, `VIMRUNTIME`, `GOROOT`, `FPATH`) before exec'ing the real binary — no manual configuration needed beyond PATH.
 

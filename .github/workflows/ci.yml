@@ -276,14 +276,19 @@ jobs:
           unzip -qo dotpack-windows-*.zip -d /tmp/dotpack-verify
 
           echo "==> Verifying .cmd wrappers..."
-          for f in nvim go gofmt; do
+          for f in git nvim go gofmt; do
             test -f "/tmp/dotpack-verify/bin/$f.cmd" || { echo "FAIL: bin/$f.cmd not found"; exit 1; }
             grep -q '@echo off' "/tmp/dotpack-verify/bin/$f.cmd" || { echo "FAIL: bin/$f.cmd missing @echo off"; exit 1; }
             echo "  bin/$f.cmd: wrapper ok"
           done
 
+          grep -q 'GIT_EXEC_PATH' /tmp/dotpack-verify/bin/git.cmd || { echo "FAIL: git.cmd missing GIT_EXEC_PATH"; exit 1; }
           grep -q 'GOROOT' /tmp/dotpack-verify/bin/go.cmd || { echo "FAIL: go.cmd missing GOROOT"; exit 1; }
           grep -q 'VIMRUNTIME' /tmp/dotpack-verify/bin/nvim.cmd || { echo "FAIL: nvim.cmd missing VIMRUNTIME"; exit 1; }
+
+          echo "==> Verifying MinGit..."
+          test -f "/tmp/dotpack-verify/git/cmd/git.exe" || { echo "FAIL: git/cmd/git.exe not found"; exit 1; }
+          echo "  git/cmd/git.exe: ok"
 
           echo "==> All checks passed."
 

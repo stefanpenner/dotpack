@@ -111,6 +111,17 @@ func TestCreateWindowsWrappers(t *testing.T) {
 		wantContains []string
 	}{
 		{
+			name: "git wrapper",
+			wrapper: wrapper{"git", `git\cmd\git.exe`, map[string]string{
+				"GIT_EXEC_PATH": `%PREFIX%\git\mingw64\libexec\git-core`,
+			}},
+			wantContains: []string{
+				"@echo off",
+				`set "GIT_EXEC_PATH=%~dp0..\git\mingw64\libexec\git-core"`,
+				`git\cmd\git.exe`,
+			},
+		},
+		{
 			name: "go wrapper",
 			wrapper: wrapper{"go", `go\bin\go.exe`, map[string]string{
 				"GOROOT": `%PREFIX%\go`,

@@ -169,6 +169,7 @@ func buildWindows(arch string, vers *versions.Versions, scriptDir string) error 
 
 	// Create .cmd wrapper scripts for Windows
 	wrappers := []wrapper{
+		{"git", `git\cmd\git.exe`, map[string]string{"GIT_EXEC_PATH": `%PREFIX%\git\mingw64\libexec\git-core`}},
 		{"nvim", `nvim\bin\nvim.exe`, map[string]string{"VIMRUNTIME": `%PREFIX%\nvim\share\nvim\runtime`}},
 		{"go", `go\bin\go.exe`, map[string]string{"GOROOT": `%PREFIX%\go`}},
 		{"gofmt", `go\bin\gofmt.exe`, map[string]string{"GOROOT": `%PREFIX%\go`}},
@@ -587,6 +588,26 @@ func downloadAll(out string, p *platform.Platform, vers *versions.Versions, skip
 	} else {
 		if err := download.TarGzFull(goURL, out, 0); err != nil {
 			return fmt.Errorf("download go: %w", err)
+		}
+	}
+
+	// Git for Windows (MinGit portable)
+	if p.IsWindows() {
+		gitWinVer := vers.Get("GIT_WINDOWS_VERSION")
+		gitArch := "64-bit"
+		if p.GoArch == "arm64" {
+			gitArch = "arm64"
+		}
+		// Version 2.53.0.2 → tag v2.53.0.windows.2
+		parts := strings.Split(gitWinVer, ".")
+		winPatch := parts[len(parts)-1]
+		gitBase := strings.Join(parts[:len(parts)-1], ".")
+		gitURL := fmt.Sprintf("https://github.com/git-for-windows/git/releases/download/v%s.windows.%s/MinGit-%s-%s.zip",
+			gitBase, winPatch, gitWinVer, gitArch)
+		fmt.Println("  git (MinGit)")
+		gitDir := filepath.Join(out, "git")
+		if err := download.ZipFull(gitURL, gitDir, 0); err != nil {
+			return fmt.Errorf("download git: %w", err)
 		}
 	}
 

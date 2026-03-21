@@ -82,7 +82,7 @@ func (p *Platform) IsWindows() bool {
 func (p *Platform) SkipTool(name string) bool {
 	if p.OS == "windows" {
 		switch name {
-		case "zsh", "git", "batman", "htop", "btop":
+		case "zsh", "batman", "htop", "btop":
 			return true
 		}
 	}

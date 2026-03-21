@@ -150,7 +150,7 @@ func TestSkipTool(t *testing.T) {
 	}{
 		{"zsh on linux", "linux", "zsh", false},
 		{"zsh on windows", "windows", "zsh", true},
-		{"git on windows", "windows", "git", true},
+		{"git on windows", "windows", "git", false},
 		{"batman on windows", "windows", "batman", true},
 		{"htop on windows", "windows", "htop", true},
 		{"btop on windows", "windows", "btop", true},

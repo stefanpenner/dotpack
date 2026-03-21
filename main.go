@@ -39,6 +39,7 @@ Options:
   ARCH defaults to current machine architecture
   DOTPACK_PREFIX env var controls install location
     (default: ~/.local on unix, %LOCALAPPDATA%\dotpack on Windows)
+  DOTPACK_NO_AUTOUPDATE=1 disables automatic update checks
 
 Examples:
   dotpack build                   Build for linux/current-arch
@@ -65,6 +66,14 @@ func main() {
 	}
 	if isTmp {
 		defer os.RemoveAll(scriptDir)
+	}
+
+	// Auto-update before running the command (skip for upgrade/version).
+	switch os.Args[1] {
+	case "upgrade", "version", "versions":
+		// no auto-update
+	default:
+		cmd.AutoUpdate(Version)
 	}
 
 	switch os.Args[1] {

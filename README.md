@@ -61,10 +61,54 @@ dotpack versions                 # Print bundled tool versions
 | direnv | yes | yes | yes |
 | lazygit | yes | yes | yes |
 | htop | yes | yes | — |
+| btop | yes | — | — |
+| dust | yes | yes | yes |
+| age | yes | yes | yes |
 | batman | yes | yes | — |
 | dotpack | yes | yes | yes |
 
 Also bundles zsh plugins (autosuggestions, fast-syntax-highlighting, history-substring-search, powerlevel10k) and fzf shell integration on Linux/macOS.
+
+## Shell integration
+
+After installing, add dotpack's paths to your shell profile so the bundled tools are available.
+
+**Bash** (`~/.bashrc` or `~/.bash_profile`):
+```bash
+export PATH="$HOME/.local/bin:$HOME/.local/go/bin:$PATH"
+export FPATH="$HOME/.local/zsh/share/zsh/5.9/functions:$FPATH"
+```
+
+**Zsh** (`~/.zshrc`):
+```zsh
+export PATH="$HOME/.local/bin:$HOME/.local/go/bin:$PATH"
+export FPATH="$HOME/.local/zsh/share/zsh/5.9/functions:$FPATH"
+
+# Bundled plugins (optional)
+source "$HOME/.local/share/zsh-autosuggestions/zsh-autosuggestions.zsh"
+source "$HOME/.local/share/zsh-fast-syntax-highlighting/fast-syntax-highlighting.plugin.zsh"
+source "$HOME/.local/share/zsh-history-substring-search/zsh-history-substring-search.zsh"
+source "$HOME/.local/share/powerlevel10k/powerlevel10k.zsh-theme"
+
+# fzf keybindings and completion (optional)
+source "$HOME/.local/share/fzf/key-bindings.zsh"
+source "$HOME/.local/share/fzf/completion.zsh"
+```
+
+**Windows (PowerShell profile)**:
+```powershell
+$dotpack = "$env:LOCALAPPDATA\dotpack"
+$env:PATH = "$dotpack\bin;$dotpack\go\bin;$env:PATH"
+```
+
+**direnv** — if using direnv, also add the hook:
+```bash
+# bash
+eval "$(direnv hook bash)"
+
+# zsh
+eval "$(direnv hook zsh)"
+```
 
 ## Deploy to a remote host
 

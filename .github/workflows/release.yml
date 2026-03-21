@@ -10,22 +10,75 @@ permissions:
   attestations: write   # SLSA provenance
 
 jobs:
+  # Build dotpack CLI binaries for all platforms
+  dotpack-cli:
+    strategy:
+      matrix:
+        include:
+          - goos: linux
+            goarch: amd64
+            name: linux-x86_64
+          - goos: linux
+            goarch: arm64
+            name: linux-aarch64
+          - goos: darwin
+            goarch: arm64
+            name: darwin-arm64
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v5.5.0
+        with:
+          go-version-file: go.mod
+
+      - name: Build dotpack CLI
+        run: |
+          GOOS=${{ matrix.goos }} GOARCH=${{ matrix.goarch }} \
+            go build -ldflags "-s -w -X main.Version=${{ github.event.release.tag_name }}" \
+            -o dotpack-${{ matrix.name }} .
+
+      - name: Upload CLI binary
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release upload "${{ github.event.release.tag_name }}" \
+            dotpack-${{ matrix.name }}
+
+  # Build Linux tool bundles (Docker multi-stage)
   linux:
+    needs: dotpack-cli
     strategy:
       matrix:
         include:
           - runner: ubuntu-latest
             arch: x86_64
+            goarch: amd64
           - runner: ubuntu-24.04-arm
             arch: aarch64
+            goarch: arm64
     runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Download dotpack CLI for this platform
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release download "${{ github.event.release.tag_name }}" \
+            --pattern "dotpack-linux-${{ matrix.arch }}" --dir .
+          chmod +x dotpack-linux-${{ matrix.arch }}
 
       - name: Build Linux bundle
         run: |
           docker build -t dotpack .
           docker run --rm dotpack > dotpack-linux-${{ matrix.arch }}.tar.gz
+          # Inject dotpack CLI into the bundle
+          tmpdir=$(mktemp -d)
+          tar xzf dotpack-linux-${{ matrix.arch }}.tar.gz -C "$tmpdir"
+          cp dotpack-linux-${{ matrix.arch }} "$tmpdir/bin/dotpack"
+          tar czf dotpack-linux-${{ matrix.arch }}.tar.gz -C "$tmpdir" .
+          rm -rf "$tmpdir"
           ls -lh dotpack-linux-${{ matrix.arch }}.tar.gz
 
       - name: Generate checksum
@@ -46,7 +99,9 @@ jobs:
             dotpack-linux-${{ matrix.arch }}.tar.gz \
             dotpack-linux-${{ matrix.arch }}.tar.gz.sha256
 
+  # Build Darwin tool bundle
   darwin:
+    needs: dotpack-cli
     strategy:
       matrix:
         include:
@@ -56,9 +111,16 @@ jobs:
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
+      - uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v5.5.0
+        with:
+          go-version-file: go.mod
+
+      - name: Build dotpack CLI
+        run: |
+          go build -ldflags "-s -w -X main.Version=${{ github.event.release.tag_name }}" -o dotpack .
+
       - name: Build Darwin bundle
         run: |
-          chmod +x dotpack
           ./dotpack build --os darwin --arch ${{ matrix.arch }}
           ls -lh dotpack-darwin-${{ matrix.arch }}.tar.gz
 

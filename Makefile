@@ -1,19 +1,31 @@
-.PHONY: build build-darwin push status install clean
+BINARY = dotpack
+VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
+LDFLAGS = -ldflags "-s -w -X main.Version=$(VERSION)"
 
-build:
-	./dotpack build
+.PHONY: build build-go build-darwin push status install clean test
 
-build-darwin:
-	./dotpack build --os darwin
+build-go:
+	go build $(LDFLAGS) -o $(BINARY) .
 
-push:
-	./dotpack push $(NAS_HOST)
+build: build-go
+	./$(BINARY) build
 
-status:
-	./dotpack status $(NAS_HOST)
+build-darwin: build-go
+	./$(BINARY) build --os darwin
 
-install:
-	./dotpack install
+push: build-go
+	./$(BINARY) push $(HOST)
+
+status: build-go
+	./$(BINARY) status $(HOST)
+
+install: build-go
+	./$(BINARY) install
 
 clean:
-	./dotpack clean
+	rm -f $(BINARY) dotpack-*.tar.gz
+	-docker rmi dotpack 2>/dev/null
+
+test: build-go
+	./$(BINARY) version
+	./$(BINARY) versions

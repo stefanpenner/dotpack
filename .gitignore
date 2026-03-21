@@ -1,3 +1,7 @@
 output/
 *.tar.gz
 .DS_Store
+dotpack-go
+# Compiled binary (keep source, ignore build output)
+/dotpack
+!/dotpack.sh

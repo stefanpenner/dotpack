@@ -3,6 +3,7 @@ package cmd
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -92,10 +93,12 @@ func TestCreateUnixWrappers(t *testing.T) {
 				}
 			}
 
-			// Verify file is executable
-			info, _ := os.Stat(filepath.Join(dir, tt.wrapper.name))
-			if info.Mode()&0111 == 0 {
-				t.Error("wrapper is not executable")
+			// Verify file is executable (skip on Windows — no Unix permissions)
+			if runtime.GOOS != "windows" {
+				info, _ := os.Stat(filepath.Join(dir, tt.wrapper.name))
+				if info.Mode()&0111 == 0 {
+					t.Error("wrapper is not executable")
+				}
 			}
 		})
 	}

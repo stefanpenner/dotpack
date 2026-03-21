@@ -80,6 +80,18 @@ func buildDarwin(arch string, vers *versions.Versions, scriptDir string) error {
 		return err
 	}
 
+	// Create symlinks in bin/ for tools installed as directory trees
+	symlinks := map[string]string{
+		"nvim":  "../nvim/bin/nvim",
+		"go":    "../go/bin/go",
+		"gofmt": "../go/bin/gofmt",
+	}
+	for name, target := range symlinks {
+		link := filepath.Join(binDir, name)
+		os.Remove(link)
+		os.Symlink(target, link)
+	}
+
 	// Copy self into bundle
 	self, err := os.Executable()
 	if err == nil {

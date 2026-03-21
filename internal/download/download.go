@@ -112,6 +112,11 @@ func TarGzFull(url, outputDir string, stripComponents int) error {
 			}
 		}
 
+		// Skip macOS AppleDouble resource fork files
+		if strings.HasPrefix(filepath.Base(name), "._") {
+			continue
+		}
+
 		target := filepath.Join(outputDir, name)
 
 		switch hdr.Typeflag {

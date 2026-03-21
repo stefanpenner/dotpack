@@ -36,6 +36,10 @@ func CreateTarGz(outputPath, sourceDir string) error {
 		if rel == "." {
 			return nil
 		}
+		// Skip macOS AppleDouble resource fork files
+		if strings.HasPrefix(filepath.Base(rel), "._") {
+			return nil
+		}
 		// Use ./ prefix like tar -C does
 		name := "./" + rel
 
@@ -99,6 +103,12 @@ func ExtractTarGz(tarGzPath, destDir string) error {
 		if name == "" {
 			continue
 		}
+
+		// Skip macOS AppleDouble resource fork files
+		if strings.HasPrefix(filepath.Base(name), "._") {
+			continue
+		}
+
 		target := filepath.Join(destDir, name)
 
 		switch hdr.Typeflag {

@@ -4,6 +4,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 IMAGE_NAME="dotpack"
+DOTPACK_PREFIX="${DOTPACK_PREFIX:-$HOME/.local}"
 
 usage() {
   cat <<'EOF'
@@ -13,7 +14,7 @@ Commands:
   build [--os OS] [--arch ARCH]   Build bundle (default: linux/current arch)
   push <host>                     Deploy bundle to remote host via SSH
   status <host>                   Show installed tool versions on host
-  install                         Install bundle locally to ~/.local
+  install                         Install bundle locally (DOTPACK_PREFIX, default ~/.local)
   clean                           Remove build artifacts and Docker image
 
 Options:
@@ -79,20 +80,24 @@ cmd_push() {
     exit 1
   fi
 
-  echo "==> Deploying to $host (~/.local)..."
-  ssh "$host" 'mkdir -p ~/.local/bin'
-  cat "$tarball" | ssh "$host" 'tar xzf - -C ~/.local'
+  local remote_prefix
+  remote_prefix="$(ssh "$host" 'echo "${DOTPACK_PREFIX:-$HOME/.local}"')"
+
+  echo "==> Deploying to $host ($remote_prefix)..."
+  ssh "$host" "mkdir -p '$remote_prefix/bin'"
+  cat "$tarball" | ssh "$host" "tar xzf - -C '$remote_prefix'"
 
   # Ensure PATH and env are configured (idempotent)
   if ! ssh "$host" 'grep -q "dotpack managed PATH" ~/.profile 2>/dev/null'; then
-    ssh "$host" 'cat >> ~/.profile' <<'PROFILE'
+    ssh "$host" "cat >> ~/.profile" <<PROFILE
 
 # dotpack managed PATH
-export PATH="$HOME/.local/bin:$HOME/.local/git/bin:$HOME/.local/zsh/bin:$HOME/.local/go/bin:$PATH"
-export GIT_EXEC_PATH="$HOME/.local/git/libexec/git-core"
+export DOTPACK_PREFIX="\${DOTPACK_PREFIX:-$remote_prefix}"
+export PATH="\$DOTPACK_PREFIX/bin:\$DOTPACK_PREFIX/git/bin:\$DOTPACK_PREFIX/zsh/bin:\$DOTPACK_PREFIX/go/bin:\$PATH"
+export GIT_EXEC_PATH="\$DOTPACK_PREFIX/git/libexec/git-core"
 # SSL certs — pick the first existing cert bundle
 for _cert in /etc/ssl/certs/ca-certificates.crt /etc/ssl/cert.pem /etc/pki/tls/certs/ca-bundle.crt; do
-  [ -f "$_cert" ] && export GIT_SSL_CAINFO="$_cert" && break
+  [ -f "\$_cert" ] && export GIT_SSL_CAINFO="\$_cert" && break
 done
 unset _cert
 PROFILE
@@ -102,13 +107,15 @@ PROFILE
   cmd_status "$host"
   echo ""
   echo "==> Deploy complete. Start a new shell or: source ~/.profile"
+  echo "    prefix: $remote_prefix"
 }
 
 cmd_status() {
   local host="${1:?Usage: dotpack status <host>}"
   echo "==> Versions on $host:"
   ssh "$host" '
-    export PATH="$HOME/.local/bin:$HOME/.local/git/bin:$HOME/.local/zsh/bin:$HOME/.local/go/bin:$PATH"
+    _dp="${DOTPACK_PREFIX:-$HOME/.local}"
+    export PATH="$_dp/bin:$_dp/git/bin:$_dp/zsh/bin:$_dp/go/bin:$PATH"
     for cmd in zsh git nvim go fzf fd bat rg lsd delta jq direnv lazygit htop; do
       if command -v "$cmd" > /dev/null 2>&1; then
         case "$cmd" in
@@ -140,10 +147,10 @@ cmd_install() {
     exit 1
   fi
 
-  echo "==> Installing to ~/.local..."
-  mkdir -p "$HOME/.local"
-  tar xzf "$tarball" -C "$HOME/.local"
-  echo "==> Done. Ensure PATH includes ~/.local/bin"
+  echo "==> Installing to $DOTPACK_PREFIX..."
+  mkdir -p "$DOTPACK_PREFIX"
+  tar xzf "$tarball" -C "$DOTPACK_PREFIX"
+  echo "==> Done. Ensure PATH includes $DOTPACK_PREFIX/bin"
 }
 
 cmd_clean() {

@@ -71,7 +71,7 @@ echo ""
 echo "dotpack installed to ${INSTALL_DIR}"
 echo ""
 echo "Add to your shell profile:"
-echo '  export PATH="$HOME/.local/bin:$HOME/.local/go/bin:$PATH"'
+echo '  export PATH="$HOME/.local/bin:$PATH"'
 echo ""
 echo "Then install your dotfiles:"
 echo "  git clone https://github.com/stefanpenner/dotfiles.git ~/src/stefanpenner/dotfiles"

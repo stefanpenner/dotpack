@@ -109,18 +109,25 @@ COPY --from=zsh-build /opt/zsh /staging/zsh/
 COPY --from=htop-build /build/htop/htop /staging/bin/htop
 COPY --from=nvim-build /opt/nvim /staging/nvim/
 
-# Create symlinks in bin/
-RUN ln -sf ../git/bin/git /staging/bin/git && \
-    ln -sf ../zsh/bin/zsh /staging/bin/zsh && \
-    ln -sf ../nvim/bin/nvim /staging/bin/nvim && \
-    ln -sf ../go/bin/go /staging/bin/go && \
-    ln -sf ../go/bin/gofmt /staging/bin/gofmt && \
+# Create wrapper scripts in bin/ (set env vars so tools are self-contained)
+RUN printf '#!/bin/sh\nPREFIX="$(cd "$(dirname "$0")/.." && pwd)"\nexport GIT_EXEC_PATH="$PREFIX/git/libexec/git-core"\nexec "$PREFIX/git/bin/git" "$@"\n' > /staging/bin/git && \
+    printf '#!/bin/sh\nPREFIX="$(cd "$(dirname "$0")/.." && pwd)"\nfor d in "$PREFIX"/zsh/share/zsh/*/functions; do [ -d "$d" ] && export FPATH="$d${FPATH:+:$FPATH}" && break; done\nexec "$PREFIX/zsh/bin/zsh" "$@"\n' > /staging/bin/zsh && \
+    printf '#!/bin/sh\nPREFIX="$(cd "$(dirname "$0")/.." && pwd)"\nexport VIMRUNTIME="$PREFIX/nvim/share/nvim/runtime"\nexec "$PREFIX/nvim/bin/nvim" "$@"\n' > /staging/bin/nvim && \
+    printf '#!/bin/sh\nPREFIX="$(cd "$(dirname "$0")/.." && pwd)"\nexport GOROOT="$PREFIX/go"\nexec "$PREFIX/go/bin/go" "$@"\n' > /staging/bin/go && \
+    printf '#!/bin/sh\nPREFIX="$(cd "$(dirname "$0")/.." && pwd)"\nexport GOROOT="$PREFIX/go"\nexec "$PREFIX/go/bin/gofmt" "$@"\n' > /staging/bin/gofmt && \
     chmod +x /staging/bin/*
 
-# Verify all binaries are static
-RUN echo "==> Verifying binaries:" && \
-    for f in /staging/bin/git /staging/bin/zsh /staging/bin/htop /staging/nvim/bin/nvim; do \
+# Verify compiled binaries are static
+RUN echo "==> Verifying static linkage:" && \
+    for f in /staging/git/bin/git /staging/zsh/bin/zsh /staging/bin/htop /staging/nvim/bin/nvim; do \
       echo "  $(basename $f): $(file $f | grep -o 'statically linked' || echo 'dynamically linked')"; \
+    done
+
+# Verify wrapper scripts are correct
+RUN echo "==> Verifying wrappers:" && \
+    for f in git zsh nvim go gofmt; do \
+      head -1 /staging/bin/$f | grep -q '#!/bin/sh' || { echo "FAIL: bin/$f is not a wrapper script"; exit 1; }; \
+      echo "  bin/$f: wrapper ok"; \
     done
 
 # Generate checksums

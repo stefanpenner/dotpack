@@ -84,18 +84,14 @@ func buildDarwin(arch string, vers *versions.Versions, scriptDir string) error {
 		return err
 	}
 
-	// Create symlinks in bin/ for tools installed as directory trees
-	symlinks := map[string]string{
-		"nvim":  "../nvim/bin/nvim",
-		"go":    "../go/bin/go",
-		"gofmt": "../go/bin/gofmt",
+	// Create wrapper scripts in bin/ for tools with runtime dependencies
+	wrappers := []wrapper{
+		{"nvim", "nvim/bin/nvim", map[string]string{"VIMRUNTIME": "$PREFIX/nvim/share/nvim/runtime"}},
+		{"go", "go/bin/go", map[string]string{"GOROOT": "$PREFIX/go"}},
+		{"gofmt", "go/bin/gofmt", map[string]string{"GOROOT": "$PREFIX/go"}},
 	}
-	for name, target := range symlinks {
-		link := filepath.Join(binDir, name)
-		os.Remove(link)
-		if err := os.Symlink(target, link); err != nil {
-			return fmt.Errorf("symlink %s: %w", name, err)
-		}
+	if err := createUnixWrappers(binDir, wrappers); err != nil {
+		return err
 	}
 
 	// Copy self into bundle
@@ -146,17 +142,14 @@ func buildWindows(arch string, vers *versions.Versions, scriptDir string) error 
 		return err
 	}
 
-	// Create .cmd shims instead of symlinks for Windows
-	shims := map[string]string{
-		"nvim.cmd":  `@"%~dp0..\nvim\bin\nvim.exe" %*`,
-		"go.cmd":    `@"%~dp0..\go\bin\go.exe" %*`,
-		"gofmt.cmd": `@"%~dp0..\go\bin\gofmt.exe" %*`,
+	// Create .cmd wrapper scripts for Windows
+	wrappers := []wrapper{
+		{"nvim", `nvim\bin\nvim.exe`, map[string]string{"VIMRUNTIME": `%PREFIX%\nvim\share\nvim\runtime`}},
+		{"go", `go\bin\go.exe`, map[string]string{"GOROOT": `%PREFIX%\go`}},
+		{"gofmt", `go\bin\gofmt.exe`, map[string]string{"GOROOT": `%PREFIX%\go`}},
 	}
-	for name, content := range shims {
-		shimPath := filepath.Join(binDir, name)
-		if err := os.WriteFile(shimPath, []byte(content+"\r\n"), 0755); err != nil {
-			return err
-		}
+	if err := createWindowsWrappers(binDir, wrappers); err != nil {
+		return err
 	}
 
 	// Copy self into bundle
@@ -570,6 +563,61 @@ func FindScriptDir(embeddedDockerfile, embeddedVersionsEnv, embeddedDownloadScri
 	}
 
 	return tmp, true, nil
+}
+
+// wrapper defines a tool that needs a wrapper script to set env vars before
+// exec'ing the real binary.
+type wrapper struct {
+	name     string            // binary name in bin/ (e.g., "git")
+	realPath string            // relative path from PREFIX to real binary
+	envVars  map[string]string // env var name -> value template ($PREFIX or %PREFIX%)
+}
+
+// createUnixWrappers writes POSIX shell wrapper scripts into binDir.
+// Each script resolves its own location, sets environment variables, and
+// exec's the real binary.
+func createUnixWrappers(binDir string, wrappers []wrapper) error {
+	for _, w := range wrappers {
+		var b strings.Builder
+		b.WriteString("#!/bin/sh\n")
+		b.WriteString(`PREFIX="$(cd "$(dirname "$0")/.." && pwd)"` + "\n")
+		for k, v := range w.envVars {
+			expanded := strings.ReplaceAll(v, "$PREFIX", `"$PREFIX"`)
+			// For FPATH, append existing value
+			if k == "FPATH" {
+				fmt.Fprintf(&b, "export %s=%s${%s:+:$%s}\n", k, expanded, k, k)
+			} else {
+				fmt.Fprintf(&b, "export %s=%s\n", k, expanded)
+			}
+		}
+		fmt.Fprintf(&b, "exec \"$PREFIX/%s\" \"$@\"\n", w.realPath)
+
+		path := filepath.Join(binDir, w.name)
+		if err := os.WriteFile(path, []byte(b.String()), 0755); err != nil {
+			return fmt.Errorf("wrapper %s: %w", w.name, err)
+		}
+	}
+	return nil
+}
+
+// createWindowsWrappers writes .cmd wrapper scripts into binDir.
+func createWindowsWrappers(binDir string, wrappers []wrapper) error {
+	for _, w := range wrappers {
+		var b strings.Builder
+		b.WriteString("@echo off\r\n")
+		for k, v := range w.envVars {
+			expanded := strings.ReplaceAll(v, `%PREFIX%`, `%~dp0..`)
+			fmt.Fprintf(&b, "set \"%s=%s\"\r\n", k, expanded)
+		}
+		realPath := strings.ReplaceAll(w.realPath, `%PREFIX%`, `%~dp0..`)
+		fmt.Fprintf(&b, "\"%%~dp0..\\%s\" %%*\r\n", realPath)
+
+		path := filepath.Join(binDir, w.name+".cmd")
+		if err := os.WriteFile(path, []byte(b.String()), 0755); err != nil {
+			return fmt.Errorf("wrapper %s: %w", w.name, err)
+		}
+	}
+	return nil
 }
 
 // VersionSummary returns a multi-line string of tool versions for display.

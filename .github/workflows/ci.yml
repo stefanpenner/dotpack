@@ -35,3 +35,64 @@ jobs:
 
       - name: Go tests
         run: go test ./...
+
+      - name: Build bundle and verify wrappers (macOS)
+        if: matrix.goos == 'darwin'
+        shell: bash
+        run: |
+          ./dotpack build --os darwin
+          mkdir -p /tmp/dotpack-verify
+          tar xzf dotpack-darwin-*.tar.gz -C /tmp/dotpack-verify
+
+          echo "==> Verifying wrappers are scripts, not symlinks..."
+          for f in nvim go gofmt; do
+            if [ -L "/tmp/dotpack-verify/bin/$f" ]; then
+              echo "FAIL: bin/$f is a symlink, expected wrapper script"
+              exit 1
+            fi
+            if ! head -1 "/tmp/dotpack-verify/bin/$f" | grep -q '#!/bin/sh'; then
+              echo "FAIL: bin/$f missing shebang"
+              exit 1
+            fi
+            echo "  bin/$f: wrapper ok"
+          done
+
+          echo "==> Verifying env vars in wrappers..."
+          grep -q 'VIMRUNTIME' /tmp/dotpack-verify/bin/nvim || { echo "FAIL: nvim missing VIMRUNTIME"; exit 1; }
+          grep -q 'GOROOT' /tmp/dotpack-verify/bin/go || { echo "FAIL: go missing GOROOT"; exit 1; }
+          grep -q 'GOROOT' /tmp/dotpack-verify/bin/gofmt || { echo "FAIL: gofmt missing GOROOT"; exit 1; }
+
+          echo "==> Verifying wrappers execute correctly..."
+          /tmp/dotpack-verify/bin/go version
+          GOROOT_OUT=$(/tmp/dotpack-verify/bin/go env GOROOT)
+          echo "  GOROOT=$GOROOT_OUT"
+          echo "$GOROOT_OUT" | grep -q '/tmp/dotpack-verify/go' || { echo "FAIL: GOROOT not set correctly"; exit 1; }
+
+          echo "==> All wrapper checks passed."
+
+      - name: Build bundle and verify wrappers (Windows)
+        if: matrix.goos == 'windows'
+        shell: bash
+        run: |
+          ./dotpack.exe build --os windows
+          mkdir -p /tmp/dotpack-verify
+          unzip -qo dotpack-windows-*.zip -d /tmp/dotpack-verify
+
+          echo "==> Verifying .cmd wrappers exist..."
+          for f in nvim go gofmt; do
+            if [ ! -f "/tmp/dotpack-verify/bin/$f.cmd" ]; then
+              echo "FAIL: bin/$f.cmd not found"
+              exit 1
+            fi
+            if ! grep -q '@echo off' "/tmp/dotpack-verify/bin/$f.cmd"; then
+              echo "FAIL: bin/$f.cmd missing @echo off"
+              exit 1
+            fi
+            echo "  bin/$f.cmd: wrapper ok"
+          done
+
+          echo "==> Verifying env vars in wrappers..."
+          grep -q 'GOROOT' /tmp/dotpack-verify/bin/go.cmd || { echo "FAIL: go.cmd missing GOROOT"; exit 1; }
+          grep -q 'VIMRUNTIME' /tmp/dotpack-verify/bin/nvim.cmd || { echo "FAIL: nvim.cmd missing VIMRUNTIME"; exit 1; }
+
+          echo "==> All wrapper checks passed."

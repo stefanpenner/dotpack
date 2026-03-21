@@ -69,20 +69,28 @@ dotpack versions                 # Print bundled tool versions
 
 Also bundles zsh plugins (autosuggestions, fast-syntax-highlighting, history-substring-search, powerlevel10k) and fzf shell integration on Linux/macOS.
 
+### Portability
+
+On **Linux**, all binaries are statically linked against musl libc — they run on any Linux distribution with no shared library dependencies.
+
+On **macOS and Windows**, binaries are downloaded from upstream releases and are **best-effort hermetic**. They don't require Homebrew, apt, or other package managers, but they do link against OS-provided system libraries (e.g. `libSystem.dylib` on macOS, system DLLs on Windows). This is a platform limitation — Apple does not support fully static linking, and Windows binaries universally depend on system DLLs.
+
+Some tools require supporting files at runtime (git needs `libexec/`, nvim needs `share/nvim/runtime/`, go needs its SDK, zsh needs function files). These are handled transparently via wrapper scripts in `bin/` that set the correct environment variables (`GIT_EXEC_PATH`, `VIMRUNTIME`, `GOROOT`, `FPATH`) before exec'ing the real binary — no manual configuration needed beyond PATH.
+
+All other tools are single-binary and fully self-contained (on Linux, statically linked; on macOS/Windows, best-effort).
+
 ## Shell integration
 
-After installing, add dotpack's paths to your shell profile so the bundled tools are available.
+Wrapper scripts in `bin/` handle `GOROOT`, `GIT_EXEC_PATH`, `VIMRUNTIME`, and `FPATH` automatically, so you only need to add `bin/` to your PATH.
 
 **Bash** (`~/.bashrc` or `~/.bash_profile`):
 ```bash
-export PATH="$HOME/.local/bin:$HOME/.local/go/bin:$PATH"
-export FPATH="$HOME/.local/zsh/share/zsh/5.9/functions:$FPATH"
+export PATH="$HOME/.local/bin:$PATH"
 ```
 
 **Zsh** (`~/.zshrc`):
 ```zsh
-export PATH="$HOME/.local/bin:$HOME/.local/go/bin:$PATH"
-export FPATH="$HOME/.local/zsh/share/zsh/5.9/functions:$FPATH"
+export PATH="$HOME/.local/bin:$PATH"
 
 # Bundled plugins (optional)
 source "$HOME/.local/share/zsh-autosuggestions/zsh-autosuggestions.zsh"
@@ -97,8 +105,7 @@ source "$HOME/.local/share/fzf/completion.zsh"
 
 **Windows (PowerShell profile)**:
 ```powershell
-$dotpack = "$env:LOCALAPPDATA\dotpack"
-$env:PATH = "$dotpack\bin;$dotpack\go\bin;$env:PATH"
+$env:PATH = "$env:LOCALAPPDATA\dotpack\bin;$env:PATH"
 ```
 
 **direnv** — if using direnv, also add the hook:

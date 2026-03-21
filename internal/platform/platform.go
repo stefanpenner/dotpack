@@ -136,7 +136,10 @@ func (p *Platform) LazygitArchiveExt() string {
 
 // NvimArchiveName returns the nvim archive base name (before extension).
 func (p *Platform) NvimArchiveName(version string) string {
-	return fmt.Sprintf("nvim-%s", p.NvimOS)
+	if p.OS == "windows" {
+		return fmt.Sprintf("nvim-%s", p.NvimOS)
+	}
+	return fmt.Sprintf("nvim-%s-%s", p.NvimOS, p.ArchGeneric)
 }
 
 // NvimArchiveExt returns the archive extension for nvim releases.

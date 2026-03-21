@@ -48,8 +48,7 @@ func Push(host, scriptDir string) error {
 		profileBlock := fmt.Sprintf(`
 # dotpack managed PATH
 export DOTPACK_PREFIX="${DOTPACK_PREFIX:-%s}"
-export PATH="$DOTPACK_PREFIX/bin:$DOTPACK_PREFIX/git/bin:$DOTPACK_PREFIX/zsh/bin:$DOTPACK_PREFIX/go/bin:$PATH"
-export GIT_EXEC_PATH="$DOTPACK_PREFIX/git/libexec/git-core"
+export PATH="$DOTPACK_PREFIX/bin:$PATH"
 # SSL certs — pick the first existing cert bundle
 for _cert in /etc/ssl/certs/ca-certificates.crt /etc/ssl/cert.pem /etc/pki/tls/certs/ca-bundle.crt; do
   [ -f "$_cert" ] && export GIT_SSL_CAINFO="$_cert" && break

@@ -121,6 +121,10 @@ func TestRustTargetFor(t *testing.T) {
 		{"fd linux aarch64", "linux", "aarch64", "fd", "aarch64-unknown-linux-musl"},
 		{"ripgrep darwin arm64", "darwin", "arm64", "ripgrep", "aarch64-apple-darwin"},
 		{"ripgrep windows x86_64", "windows", "x86_64", "ripgrep", "x86_64-pc-windows-msvc"},
+		{"dust darwin arm64", "darwin", "arm64", "dust", "x86_64-apple-darwin"},
+		{"dust darwin x86_64", "darwin", "x86_64", "dust", "x86_64-apple-darwin"},
+		{"dust linux x86_64", "linux", "x86_64", "dust", "x86_64-unknown-linux-musl"},
+		{"dust linux aarch64", "linux", "aarch64", "dust", "aarch64-unknown-linux-musl"},
 	}
 
 	for _, tt := range tests {
@@ -149,6 +153,8 @@ func TestSkipTool(t *testing.T) {
 		{"git on windows", "windows", "git", true},
 		{"batman on windows", "windows", "batman", true},
 		{"htop on windows", "windows", "htop", true},
+		{"btop on windows", "windows", "btop", true},
+		{"btop on linux", "linux", "btop", false},
 		{"fzf on windows", "windows", "fzf", false},
 		{"nvim on windows", "windows", "nvim", false},
 		{"fd on linux", "linux", "fd", false},

@@ -110,5 +110,36 @@ fi
 echo "  go"
 curl -fsSL "https://go.dev/dl/go${GO_VERSION}.${OS}-${GOARCH}.tar.gz" | tar xz -C "$OUT"
 
+# --- fzf shell integration (from source repo) ---
+echo "  fzf shell integration"
+fzf_tmp=$(mktemp -d)
+curl -fsSL "https://github.com/junegunn/fzf/archive/refs/tags/v${FZF_VERSION}.tar.gz" | tar xz -C "$fzf_tmp"
+mkdir -p "$OUT/share/fzf"
+cp "$fzf_tmp"/fzf-*/shell/key-bindings.zsh "$OUT/share/fzf/"
+cp "$fzf_tmp"/fzf-*/shell/completion.zsh "$OUT/share/fzf/"
+rm -rf "$fzf_tmp"
+
+# --- Zsh plugins (shell scripts — portable) ---
+mkdir -p "$OUT/share"
+
+dl_plugin() {
+  local name=$1 url=$2
+  echo "  $name"
+  local tmp; tmp=$(mktemp -d)
+  curl -fsSL "$url" | tar xz -C "$tmp"
+  # GitHub tarballs extract to repo-tag/, flatten to just the name
+  mv "$tmp"/*/ "$OUT/share/$name"
+  rm -rf "$tmp"
+}
+
+dl_plugin zsh-autosuggestions \
+  "https://github.com/zsh-users/zsh-autosuggestions/archive/refs/tags/${ZSH_AUTOSUGGESTIONS_VERSION}.tar.gz"
+dl_plugin zsh-fast-syntax-highlighting \
+  "https://github.com/zdharma-continuum/fast-syntax-highlighting/archive/refs/tags/${FAST_SYNTAX_HIGHLIGHTING_VERSION}.tar.gz"
+dl_plugin zsh-history-substring-search \
+  "https://github.com/zsh-users/zsh-history-substring-search/archive/refs/tags/${ZSH_HISTORY_SUBSTRING_SEARCH_VERSION}.tar.gz"
+dl_plugin powerlevel10k \
+  "https://github.com/romkatv/powerlevel10k/archive/refs/tags/${POWERLEVEL10K_VERSION}.tar.gz"
+
 chmod +x "$OUT/bin"/*
-echo "==> Done: $(ls "$OUT/bin" | wc -l | tr -d ' ') binaries + nvim + go"
+echo "==> Done: $(ls "$OUT/bin" | wc -l | tr -d ' ') binaries + nvim + go + plugins"

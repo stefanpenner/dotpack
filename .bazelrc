@@ -1,0 +1,35 @@
+# Bzlmod is the only dep management in Bazel 9+
+build --enable_bzlmod
+
+# Hermetic builds: don't inherit host env
+build --incompatible_strict_action_env
+
+# Pure Go — no CGo needed
+build --@rules_go//go/config:pure
+
+# Version stamping for go_binary x_defs
+build --stamp
+build --workspace_status_command=tools/workspace_status.sh
+
+# Platform configs for cross-compilation
+build:linux-x86_64 --platforms=@zig_sdk//platform:linux_amd64
+build:linux-x86_64-musl --extra_toolchains=@zig_sdk//toolchain:linux_amd64_musl
+build:linux-aarch64 --platforms=@zig_sdk//platform:linux_arm64
+build:linux-aarch64-musl --extra_toolchains=@zig_sdk//toolchain:linux_arm64_musl
+build:darwin-arm64 --platforms=@zig_sdk//platform:darwin_arm64
+build:darwin-x86_64 --platforms=@zig_sdk//platform:darwin_amd64
+
+# Go cross-compilation (pure Go, no CGo)
+build:go-linux-amd64 --platforms=@rules_go//go/toolchain:linux_amd64
+build:go-linux-arm64 --platforms=@rules_go//go/toolchain:linux_arm64
+build:go-darwin-arm64 --platforms=@rules_go//go/toolchain:darwin_arm64
+build:go-windows-amd64 --platforms=@rules_go//go/toolchain:windows_amd64
+
+# Source builds (htop, git, eza, ncurses, nvim) need unsandboxed execution
+# for access to host tools (autotools, cargo, cmake) and network (git clone).
+# Usage: bazel build //bundle:source_built --config=source-build
+build:source-build --spawn_strategy=local
+
+# Sensible defaults
+build --verbose_failures
+test --test_output=errors

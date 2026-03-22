@@ -14,6 +14,7 @@ type Platform struct {
 	LazygitOS      string // "Linux", "Darwin", or "Windows"
 	NvimOS         string // "linux", "macos", "win64", "win-arm64"
 	JqOS           string // "linux", "macos", or "windows"
+	ZigOS          string // "linux", "macos", or "windows"
 	DockerPlatform string // e.g. "linux/amd64"
 	ExeSuffix      string // "" on unix, ".exe" on windows
 	BundleExt      string // "tar.gz" or "zip"
@@ -43,6 +44,7 @@ func New(os, arch string) (*Platform, error) {
 		p.LazygitOS = "Linux"
 		p.NvimOS = "linux"
 		p.JqOS = "linux"
+		p.ZigOS = "linux"
 		p.BundleExt = "tar.gz"
 	case "darwin":
 		p.RustTarget = p.RustArch + "-apple-darwin"
@@ -50,12 +52,14 @@ func New(os, arch string) (*Platform, error) {
 		p.LazygitOS = "Darwin"
 		p.NvimOS = "macos"
 		p.JqOS = "macos"
+		p.ZigOS = "macos"
 		p.BundleExt = "tar.gz"
 	case "windows":
 		p.RustTarget = p.RustArch + "-pc-windows-msvc"
 		p.RustTargetGNU = p.RustTarget
 		p.LazygitOS = "Windows"
 		p.JqOS = "windows"
+		p.ZigOS = "windows"
 		p.ExeSuffix = ".exe"
 		p.BundleExt = "zip"
 		// nvim uses non-standard naming on Windows

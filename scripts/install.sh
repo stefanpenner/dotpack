@@ -1,19 +1,19 @@
 #!/bin/bash
-# Dotpack installer — downloads and extracts the hermetic tool bundle.
+# Devlayer installer — downloads and extracts the hermetic tool bundle.
 #
 # Usage:
-#   curl -fsSL https://github.com/stefanpenner/dotpack/releases/latest/download/install.sh | bash
+#   curl -fsSL https://github.com/stefanpenner/devlayer/releases/latest/download/install.sh | bash
 #
 # Options (env vars):
-#   DOTPACK_VERSION=v0.1.0   Pin to a specific release (default: latest)
-#   DOTPACK_DIR=$HOME/.local  Install directory (default: ~/.local)
-#   DOTPACK_REPO=user/repo   Override repo (default: stefanpenner/dotpack)
+#   DEVLAYER_VERSION=v0.1.0   Pin to a specific release (default: latest)
+#   DEVLAYER_DIR=$HOME/.local  Install directory (default: ~/.local)
+#   DEVLAYER_REPO=user/repo   Override repo (default: stefanpenner/devlayer)
 #
 set -euo pipefail
 
-REPO="${DOTPACK_REPO:-stefanpenner/dotpack}"
-VERSION="${DOTPACK_VERSION:-latest}"
-INSTALL_DIR="${DOTPACK_DIR:-$HOME/.local}"
+REPO="${DEVLAYER_REPO:-stefanpenner/devlayer}"
+VERSION="${DEVLAYER_VERSION:-latest}"
+INSTALL_DIR="${DEVLAYER_DIR:-$HOME/.local}"
 OS="$(uname -s | tr '[:upper:]' '[:lower:]')"
 ARCH="$(uname -m)"
 
@@ -29,8 +29,8 @@ case "$ARCH" in
   *) echo "Unsupported architecture: $ARCH" >&2; exit 1 ;;
 esac
 
-ASSET="dotpack-${OS}-${ARCH}.tar.gz"
-CHECKSUM_ASSET="dotpack-${OS}-${ARCH}.tar.gz.sha256"
+ASSET="devlayer-${OS}-${ARCH}.tar.gz"
+CHECKSUM_ASSET="devlayer-${OS}-${ARCH}.tar.gz.sha256"
 
 if [ "$VERSION" = "latest" ]; then
   BASE_URL="https://github.com/${REPO}/releases/latest/download"
@@ -38,7 +38,7 @@ else
   BASE_URL="https://github.com/${REPO}/releases/download/${VERSION}"
 fi
 
-echo "dotpack: installing ${VERSION} for ${OS}/${ARCH}"
+echo "devlayer: installing ${VERSION} for ${OS}/${ARCH}"
 echo "  target: ${INSTALL_DIR}"
 
 # Download
@@ -68,7 +68,7 @@ mkdir -p "${INSTALL_DIR}"
 tar xzf "${TMP}/${ASSET}" -C "${INSTALL_DIR}"
 
 echo ""
-echo "dotpack installed to ${INSTALL_DIR}"
+echo "devlayer installed to ${INSTALL_DIR}"
 echo ""
 echo "Add to your shell profile:"
 echo '  export PATH="$HOME/.local/bin:$PATH"'

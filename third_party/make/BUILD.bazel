@@ -1,0 +1,25 @@
+load("@rules_foreign_cc//foreign_cc:defs.bzl", "configure_make")
+
+# GNU make — built statically, no external dependencies
+# Target named "gnumake" to avoid name collision with the "make" binary
+# that GNU make produces in its build directory.
+configure_make(
+    name = "gnumake",
+    args = ["-j"],
+    env = select({
+        "@platforms//os:linux": {
+            "CFLAGS": "-Os -DNDEBUG",
+            "LDFLAGS": "-static",
+        },
+        "@platforms//os:macos": {
+            "CFLAGS": "-Os -DNDEBUG",
+            "AR": "/usr/bin/ar",
+        },
+        "//conditions:default": {
+            "CFLAGS": "-Os -DNDEBUG",
+        },
+    }),
+    lib_source = "@make_src//:all_srcs",
+    out_binaries = ["make"],
+    visibility = ["//visibility:public"],
+)

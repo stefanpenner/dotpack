@@ -7,13 +7,13 @@ import (
 	"runtime"
 	"strings"
 
-	"github.com/stefanpenner/dotpack/internal/ssh"
+	"github.com/stefanpenner/devlayer/internal/ssh"
 )
 
 const statusScript = `
-    _dp="${DOTPACK_PREFIX:-$HOME/.local}"
+    _dp="${DEVLAYER_PREFIX:-$HOME/.local}"
     export PATH="$_dp/bin:$_dp/git/bin:$_dp/zsh/bin:$_dp/go/bin:$PATH"
-    for cmd in zsh git nvim go fzf fd bat rg lsd delta jq direnv lazygit htop dotpack; do
+    for cmd in zsh git nvim go zig make fzf fd bat rg eza delta jq direnv lazygit htop devlayer; do
       if command -v "$cmd" > /dev/null 2>&1; then
         case "$cmd" in
           zsh)     ver=$(zsh --version 2>&1) ;;
@@ -21,8 +21,10 @@ const statusScript = `
           nvim)    ver=$(nvim --version 2>&1 | head -1) ;;
           go)      ver=$(go version 2>&1) ;;
           htop)    ver=$(htop --version 2>&1 | head -1) ;;
+          zig)     ver=$(zig version 2>&1) ;;
+          make)    ver=$(make --version 2>&1 | head -1) ;;
           lazygit) ver=$(lazygit --version 2>&1 | head -1) ;;
-          dotpack) ver=$(dotpack version 2>&1) ;;
+          devlayer) ver=$(devlayer version 2>&1) ;;
           *)       ver=$("$cmd" --version 2>&1 | head -1) ;;
         esac
         printf "  %-10s %s\n" "$cmd" "$ver"
@@ -57,16 +59,18 @@ func statusNative() error {
 	}{
 		{"nvim", []string{"--version"}},
 		{"go", []string{"version"}},
+		{"zig", []string{"version"}},
+		{"make", []string{"--version"}},
 		{"fzf", []string{"--version"}},
 		{"fd", []string{"--version"}},
 		{"bat", []string{"--version"}},
 		{"rg", []string{"--version"}},
-		{"lsd", []string{"--version"}},
+		{"eza", []string{"--version"}},
 		{"delta", []string{"--version"}},
 		{"jq", []string{"--version"}},
 		{"direnv", []string{"--version"}},
 		{"lazygit", []string{"--version"}},
-		{"dotpack", []string{"version"}},
+		{"devlayer", []string{"version"}},
 	}
 
 	for _, t := range tools {

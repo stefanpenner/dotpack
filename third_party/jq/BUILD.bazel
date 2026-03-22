@@ -1,0 +1,10 @@
+# jq — JSON processor (pre-built binary)
+alias(
+    name = "jq",
+    actual = select({
+        "//tools:linux_amd64": "@jq_linux_amd64//file:jq",
+        "//tools:linux_arm64": "@jq_linux_arm64//file:jq",
+        "//tools:darwin_arm64": "@jq_darwin_arm64//file:jq",
+    }),
+    visibility = ["//visibility:public"],
+)

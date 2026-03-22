@@ -9,7 +9,7 @@ import (
 	"runtime"
 	"strings"
 
-	"github.com/stefanpenner/dotpack/internal/archive"
+	"github.com/stefanpenner/devlayer/internal/archive"
 )
 
 // Upgrade downloads the latest release and installs it.
@@ -48,7 +48,7 @@ func Upgrade(currentVersion string) error {
 	fmt.Printf("==> Upgrading %s → %s\n", currentVersion, latestTag)
 
 	// Download the bundle
-	assetName := fmt.Sprintf("dotpack-%s-%s.%s", osName, arch, ext)
+	assetName := fmt.Sprintf("devlayer-%s-%s.%s", osName, arch, ext)
 	var downloadURL string
 	for _, asset := range release.Assets {
 		if asset.Name == assetName {
@@ -66,7 +66,7 @@ func Upgrade(currentVersion string) error {
 	}
 
 	fmt.Printf("==> Downloading %s...\n", assetName)
-	tmp, err := os.CreateTemp("", "dotpack-upgrade-*."+ext)
+	tmp, err := os.CreateTemp("", "devlayer-upgrade-*."+ext)
 	if err != nil {
 		return err
 	}
@@ -144,7 +144,7 @@ func authedGet(url, accept string) (*http.Response, error) {
 }
 
 func getLatestRelease() (*ghRelease, error) {
-	resp, err := authedGet("https://api.github.com/repos/stefanpenner/dotpack/releases/latest", "application/vnd.github+json")
+	resp, err := authedGet("https://api.github.com/repos/stefanpenner/devlayer/releases/latest", "application/vnd.github+json")
 	if err != nil {
 		return nil, err
 	}

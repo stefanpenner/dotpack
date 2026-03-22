@@ -1,0 +1,26 @@
+load("//tools:versions.bzl", "VERSIONS")
+
+# htop — interactive process viewer (built from source)
+# Requires autotools (autoconf, automake, libtool) on the host.
+# Install via: brew install autoconf automake libtool
+genrule(
+    name = "htop",
+    srcs = ["@htop_src//:all_srcs"],
+    outs = ["htop_bin"],
+    cmd = """
+        set -e
+        export PATH="/opt/homebrew/bin:/usr/local/bin:$$PATH"
+        OUT=$$(pwd)/$@
+        SRC=$$(pwd)/external/+tool_repos+htop_src
+        BUILD=$$(mktemp -d)
+        cp -r $$SRC/* $$BUILD/
+        cd $$BUILD
+        ./autogen.sh
+        ./configure CFLAGS="-Os -DNDEBUG"
+        make -j$$(nproc 2>/dev/null || sysctl -n hw.ncpu)
+        cp htop $$OUT
+        rm -rf $$BUILD
+    """,
+    tags = ["no-sandbox"],
+    visibility = ["//visibility:public"],
+)

@@ -1,0 +1,36 @@
+load("@rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "cmd",
+    srcs = [
+        "autoupdate.go",
+        "build.go",
+        "clean.go",
+        "install.go",
+        "ls.go",
+        "push.go",
+        "status.go",
+        "upgrade.go",
+    ],
+    importpath = "github.com/stefanpenner/devlayer/cmd",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//internal/archive",
+        "//internal/config",
+        "//internal/docker",
+        "//internal/download",
+        "//internal/nvimplugins",
+        "//internal/platform",
+        "//internal/ssh",
+        "//internal/versions",
+        "@com_github_charmbracelet_lipgloss//:lipgloss",
+        "@com_github_charmbracelet_lipgloss//list",
+        "@com_github_charmbracelet_lipgloss//table",
+    ],
+)
+
+go_test(
+    name = "cmd_test",
+    srcs = ["wrapper_test.go"],
+    embed = [":cmd"],
+)

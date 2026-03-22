@@ -1,0 +1,32 @@
+load("@rules_foreign_cc//foreign_cc:defs.bzl", "configure_make")
+
+# Zsh — Z shell (built from source)
+# Uses release tarball from zsh.org which includes pre-generated configure.
+configure_make(
+    name = "zsh",
+    args = ["-j"],
+    configure_options = [
+        "--enable-multibyte",
+        "--enable-unicode9",
+        "--without-tcsetpgrp",
+    ],
+    env = select({
+        "@platforms//os:linux": {
+            "CFLAGS": "-Os -DNDEBUG",
+            "LDFLAGS": "-static",
+        },
+        "@platforms//os:macos": {
+            "CFLAGS": "-Os -DNDEBUG",
+            "AR": "/usr/bin/ar",
+        },
+        "//conditions:default": {
+            "CFLAGS": "-Os -DNDEBUG",
+        },
+    }),
+    lib_source = "@zsh_src//:all_srcs",
+    out_binaries = ["zsh"],
+    # Zsh installs function files to share/zsh/
+    out_data_dirs = ["share"],
+    out_shared_libs = [],
+    visibility = ["//visibility:public"],
+)

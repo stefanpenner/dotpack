@@ -1,7 +1,17 @@
 output/
 *.tar.gz
+*.zip
 .DS_Store
-dotpack-go
-# Compiled binary (keep source, ignore build output)
+
+# Compiled binaries
+/devlayer
+/devlayer.exe
+
+# Legacy artifacts
 /dotpack
-!/dotpack.sh
+/dotpack-*
+/devlayer-go
+
+# Bazel
+/bazel-*
+MODULE.bazel.lock

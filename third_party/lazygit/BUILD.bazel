@@ -1,0 +1,10 @@
+# lazygit — terminal UI for git (pre-built binary)
+alias(
+    name = "lazygit",
+    actual = select({
+        "//tools:linux_amd64": "@lazygit_linux_amd64//:lazygit",
+        "//tools:linux_arm64": "@lazygit_linux_arm64//:lazygit",
+        "//tools:darwin_arm64": "@lazygit_darwin_arm64//:lazygit",
+    }),
+    visibility = ["//visibility:public"],
+)

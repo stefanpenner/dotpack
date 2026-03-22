@@ -13,75 +13,92 @@ permissions:
   attestations: write
 
 jobs:
-  # Unit tests on all platforms
+  # Build + test with Bazel on all platforms
   test:
     strategy:
       matrix:
         include:
           - runner: ubuntu-latest
-            goos: linux
+            os: linux
           - runner: macos-15
-            goos: darwin
+            os: darwin
           - runner: windows-latest
-            goos: windows
+            os: windows
     runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
-      - uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v5.5.0
+      - name: Cache Bazel
+        uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
         with:
-          go-version-file: go.mod
+          path: |
+            ~/.cache/bazel
+            ~/.cache/bazelisk
+          key: bazel-${{ matrix.os }}-${{ hashFiles('.bazelversion', 'MODULE.bazel', 'MODULE.bazel.lock') }}
+          restore-keys: bazel-${{ matrix.os }}-
 
       - name: Build CLI
-        run: go build -ldflags "-s -w -X main.Version=test" -o dotpack${{ matrix.goos == 'windows' && '.exe' || '' }} .
+        run: bazel build //:devlayer
+
+      - name: Run tests
+        run: bazel test //...
 
       - name: Smoke test
         shell: bash
         run: |
-          ./dotpack${{ matrix.goos == 'windows' && '.exe' || '' }} version
-          ./dotpack${{ matrix.goos == 'windows' && '.exe' || '' }} versions
+          if [ "${{ matrix.os }}" = "windows" ]; then
+            ./bazel-bin/devlayer_/devlayer.exe version
+            ./bazel-bin/devlayer_/devlayer.exe versions
+          else
+            ./bazel-bin/devlayer_/devlayer version
+            ./bazel-bin/devlayer_/devlayer versions
+          fi
 
-      - name: Go tests
-        run: go test ./...
+      - name: Version sync check
+        if: matrix.os != 'windows'
+        run: tools/versions_sync_test.sh
 
-  # Build dotpack CLI binaries for all platforms
+  # Build devlayer CLI binaries for all platforms (cross-compiled via Bazel)
   cli:
     strategy:
       matrix:
         include:
-          - goos: linux
-            goarch: amd64
+          - config: go-linux-amd64
             name: linux-x86_64
-          - goos: linux
-            goarch: arm64
+            binary: devlayer
+          - config: go-linux-arm64
             name: linux-aarch64
-          - goos: darwin
-            goarch: arm64
+            binary: devlayer
+          - config: go-darwin-arm64
             name: darwin-arm64
-          - goos: windows
-            goarch: amd64
+            binary: devlayer
+          - config: go-windows-amd64
             name: windows-x86_64
-            ext: .exe
+            binary: devlayer.exe
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
-      - uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v5.5.0
+      - name: Cache Bazel
+        uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
         with:
-          go-version-file: go.mod
+          path: |
+            ~/.cache/bazel
+            ~/.cache/bazelisk
+          key: bazel-cli-${{ matrix.name }}-${{ hashFiles('.bazelversion', 'MODULE.bazel', 'MODULE.bazel.lock') }}
+          restore-keys: bazel-cli-${{ matrix.name }}-
 
-      - name: Build dotpack CLI
-        run: |
-          version="${{ github.event.release.tag_name || 'ci' }}"
-          GOOS=${{ matrix.goos }} GOARCH=${{ matrix.goarch }} \
-            go build -ldflags "-s -w -X main.Version=$version" \
-            -o dotpack-${{ matrix.name }}${{ matrix.ext }} .
+      - name: Build devlayer CLI
+        run: bazel build //:devlayer --config=${{ matrix.config }}
+
+      - name: Prepare artifact
+        run: cp bazel-bin/devlayer_/${{ matrix.binary }} devlayer-${{ matrix.name }}${{ matrix.binary == 'devlayer.exe' && '.exe' || '' }}
 
       - name: Upload CLI artifact
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: cli-${{ matrix.name }}
-          path: dotpack-${{ matrix.name }}${{ matrix.ext }}
+          path: devlayer-${{ matrix.name }}${{ matrix.binary == 'devlayer.exe' && '.exe' || '' }}
 
       - name: Upload to release
         if: github.event_name == 'release'
@@ -89,7 +106,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh release upload "${{ github.event.release.tag_name }}" \
-            dotpack-${{ matrix.name }}${{ matrix.ext }}
+            devlayer-${{ matrix.name }}${{ matrix.binary == 'devlayer.exe' && '.exe' || '' }}
 
   # Build Linux tool bundles (Docker)
   linux:
@@ -114,50 +131,52 @@ jobs:
 
       - name: Build Linux bundle
         run: |
-          chmod +x dotpack-linux-${{ matrix.arch }}
-          docker build -t dotpack .
-          docker run --rm dotpack > dotpack-linux-${{ matrix.arch }}.tar.gz
-          # Inject dotpack CLI into the bundle
+          chmod +x devlayer-linux-${{ matrix.arch }}
+          docker build -t devlayer .
+          docker run --rm devlayer > devlayer-linux-${{ matrix.arch }}.tar.gz
+          # Inject devlayer CLI into the bundle
           tmpdir=$(mktemp -d)
-          tar xzf dotpack-linux-${{ matrix.arch }}.tar.gz -C "$tmpdir"
-          cp dotpack-linux-${{ matrix.arch }} "$tmpdir/bin/dotpack"
-          tar czf dotpack-linux-${{ matrix.arch }}.tar.gz -C "$tmpdir" .
+          tar xzf devlayer-linux-${{ matrix.arch }}.tar.gz -C "$tmpdir"
+          cp devlayer-linux-${{ matrix.arch }} "$tmpdir/bin/devlayer"
+          tar czf devlayer-linux-${{ matrix.arch }}.tar.gz -C "$tmpdir" .
           rm -rf "$tmpdir"
-          ls -lh dotpack-linux-${{ matrix.arch }}.tar.gz
+          ls -lh devlayer-linux-${{ matrix.arch }}.tar.gz
 
       - name: Verify bundle
         run: |
-          mkdir -p /tmp/dotpack-verify
-          tar xzf dotpack-linux-${{ matrix.arch }}.tar.gz -C /tmp/dotpack-verify
+          mkdir -p /tmp/devlayer-verify
+          tar xzf devlayer-linux-${{ matrix.arch }}.tar.gz -C /tmp/devlayer-verify
 
           echo "==> Verifying wrappers..."
-          for f in git zsh nvim go gofmt; do
-            head -1 "/tmp/dotpack-verify/bin/$f" | grep -q '#!/bin/sh' || { echo "FAIL: bin/$f not a wrapper"; exit 1; }
+          for f in git zsh nvim go gofmt zig cc c++; do
+            head -1 "/tmp/devlayer-verify/bin/$f" | grep -q '#!/bin/sh' || { echo "FAIL: bin/$f not a wrapper"; exit 1; }
             echo "  bin/$f: wrapper ok"
           done
 
           echo "==> Verifying static linkage..."
-          for f in git/bin/git zsh/bin/zsh bin/htop bin/btop nvim/bin/nvim; do
-            file "/tmp/dotpack-verify/$f" | grep -q 'statically linked' || { echo "WARN: $f not static"; }
-            echo "  $f: $(file "/tmp/dotpack-verify/$f" | grep -o 'statically linked' || echo 'dynamically linked')"
+          for f in git/bin/git zsh/bin/zsh bin/htop bin/btop nvim/bin/nvim bin/make; do
+            file "/tmp/devlayer-verify/$f" | grep -q 'statically linked' || { echo "WARN: $f not static"; }
+            echo "  $f: $(file "/tmp/devlayer-verify/$f" | grep -o 'statically linked' || echo 'dynamically linked')"
           done
 
           echo "==> Verifying tools execute..."
-          /tmp/dotpack-verify/bin/go version
-          /tmp/dotpack-verify/bin/nvim --version | head -1
-          /tmp/dotpack-verify/bin/htop --version | head -1
-          /tmp/dotpack-verify/bin/btop --version | head -1
+          /tmp/devlayer-verify/bin/go version
+          /tmp/devlayer-verify/bin/nvim --version | head -1
+          /tmp/devlayer-verify/bin/htop --version | head -1
+          /tmp/devlayer-verify/bin/btop --version | head -1
+          /tmp/devlayer-verify/bin/zig version
+          /tmp/devlayer-verify/bin/make --version | head -1
 
           echo "==> All checks passed."
 
       - name: Generate checksum
-        run: sha256sum dotpack-linux-${{ matrix.arch }}.tar.gz > dotpack-linux-${{ matrix.arch }}.tar.gz.sha256
+        run: sha256sum devlayer-linux-${{ matrix.arch }}.tar.gz > devlayer-linux-${{ matrix.arch }}.tar.gz.sha256
 
       - name: Attest build provenance
         if: github.event_name == 'release' && github.event.repository.visibility == 'public'
         uses: actions/attest-build-provenance@a2bbfa25375fe432b6a289bc6b6cd05ecd0c4c32 # v2.1.0
         with:
-          subject-path: dotpack-linux-${{ matrix.arch }}.tar.gz
+          subject-path: devlayer-linux-${{ matrix.arch }}.tar.gz
 
       - name: Upload to release
         if: github.event_name == 'release'
@@ -165,8 +184,8 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh release upload "${{ github.event.release.tag_name }}" \
-            dotpack-linux-${{ matrix.arch }}.tar.gz \
-            dotpack-linux-${{ matrix.arch }}.tar.gz.sha256
+            devlayer-linux-${{ matrix.arch }}.tar.gz \
+            devlayer-linux-${{ matrix.arch }}.tar.gz.sha256
 
   # Build Darwin tool bundle
   darwin:
@@ -180,63 +199,79 @@ jobs:
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
-      - uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v5.5.0
+      - name: Cache Bazel
+        uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
         with:
-          go-version-file: go.mod
+          path: |
+            ~/.cache/bazel
+            ~/.cache/bazelisk
+          key: bazel-darwin-bundle-${{ hashFiles('.bazelversion', 'MODULE.bazel', 'MODULE.bazel.lock') }}
+          restore-keys: bazel-darwin-bundle-
 
       - name: Install build dependencies
         run: brew install cmake ninja autoconf automake libtool
 
-      - name: Build dotpack CLI
+      - name: Build devlayer CLI with Bazel
+        run: bazel build //:devlayer
+
+      - name: Build source tools with Bazel
         run: |
-          version="${{ github.event.release.tag_name || 'ci' }}"
-          go build -ldflags "-s -w -X main.Version=$version" -o dotpack .
+          bazel build \
+            //third_party/btop \
+            //third_party/make:gnumake \
+            //third_party/zsh \
+            --config=source-build
 
       - name: Build Darwin bundle
         run: |
-          ./dotpack build --os darwin --arch ${{ matrix.arch }}
-          ls -lh dotpack-darwin-${{ matrix.arch }}.tar.gz
+          # Use the Bazel-built CLI to assemble the full bundle
+          ./bazel-bin/devlayer_/devlayer build --os darwin --arch ${{ matrix.arch }}
+          ls -lh devlayer-darwin-${{ matrix.arch }}.tar.gz
 
       - name: Verify bundle
         run: |
-          mkdir -p /tmp/dotpack-verify
-          tar xzf dotpack-darwin-${{ matrix.arch }}.tar.gz -C /tmp/dotpack-verify
+          mkdir -p /tmp/devlayer-verify
+          tar xzf devlayer-darwin-${{ matrix.arch }}.tar.gz -C /tmp/devlayer-verify
 
           echo "==> Verifying wrappers..."
-          for f in nvim go gofmt; do
-            test ! -L "/tmp/dotpack-verify/bin/$f" || { echo "FAIL: bin/$f is a symlink"; exit 1; }
-            head -1 "/tmp/dotpack-verify/bin/$f" | grep -q '#!/bin/sh' || { echo "FAIL: bin/$f not a wrapper"; exit 1; }
+          for f in nvim go gofmt zig cc c++; do
+            test ! -L "/tmp/devlayer-verify/bin/$f" || { echo "FAIL: bin/$f is a symlink"; exit 1; }
+            head -1 "/tmp/devlayer-verify/bin/$f" | grep -q '#!/bin/sh' || { echo "FAIL: bin/$f not a wrapper"; exit 1; }
             echo "  bin/$f: wrapper ok"
           done
 
           echo "==> Verifying env vars..."
-          grep -q 'VIMRUNTIME' /tmp/dotpack-verify/bin/nvim || { echo "FAIL: nvim missing VIMRUNTIME"; exit 1; }
-          grep -q 'GOROOT' /tmp/dotpack-verify/bin/go || { echo "FAIL: go missing GOROOT"; exit 1; }
+          grep -q 'VIMRUNTIME' /tmp/devlayer-verify/bin/nvim || { echo "FAIL: nvim missing VIMRUNTIME"; exit 1; }
+          grep -q 'GOROOT' /tmp/devlayer-verify/bin/go || { echo "FAIL: go missing GOROOT"; exit 1; }
 
           echo "==> Verifying source-built tools..."
-          test -x /tmp/dotpack-verify/bin/htop || { echo "FAIL: htop not found"; exit 1; }
-          test -x /tmp/dotpack-verify/bin/btop || { echo "FAIL: btop not found"; exit 1; }
-          test -x /tmp/dotpack-verify/nvim/bin/nvim || { echo "FAIL: nvim not found"; exit 1; }
-          test -d /tmp/dotpack-verify/nvim/share/nvim/runtime || { echo "FAIL: nvim runtime not found"; exit 1; }
+          test -x /tmp/devlayer-verify/bin/htop || { echo "FAIL: htop not found"; exit 1; }
+          test -x /tmp/devlayer-verify/bin/btop || { echo "FAIL: btop not found"; exit 1; }
+          test -x /tmp/devlayer-verify/bin/make || { echo "FAIL: make not found"; exit 1; }
+          test -x /tmp/devlayer-verify/nvim/bin/nvim || { echo "FAIL: nvim not found"; exit 1; }
+          test -d /tmp/devlayer-verify/nvim/share/nvim/runtime || { echo "FAIL: nvim runtime not found"; exit 1; }
+          test -d /tmp/devlayer-verify/zig || { echo "FAIL: zig not found"; exit 1; }
 
           echo "==> Verifying tools execute..."
-          /tmp/dotpack-verify/bin/go version
-          GOROOT_OUT=$(/tmp/dotpack-verify/bin/go env GOROOT)
-          echo "$GOROOT_OUT" | grep -q '/tmp/dotpack-verify/go' || { echo "FAIL: GOROOT wrong"; exit 1; }
-          /tmp/dotpack-verify/bin/nvim --version | head -1
-          /tmp/dotpack-verify/bin/htop --version | head -1
-          /tmp/dotpack-verify/bin/btop --version | head -1
+          /tmp/devlayer-verify/bin/go version
+          GOROOT_OUT=$(/tmp/devlayer-verify/bin/go env GOROOT)
+          echo "$GOROOT_OUT" | grep -q '/tmp/devlayer-verify/go' || { echo "FAIL: GOROOT wrong"; exit 1; }
+          /tmp/devlayer-verify/bin/nvim --version | head -1
+          /tmp/devlayer-verify/bin/htop --version | head -1
+          /tmp/devlayer-verify/bin/btop --version | head -1
+          /tmp/devlayer-verify/bin/zig version
+          /tmp/devlayer-verify/bin/make --version | head -1
 
           echo "==> All checks passed."
 
       - name: Generate checksum
-        run: shasum -a 256 dotpack-darwin-${{ matrix.arch }}.tar.gz > dotpack-darwin-${{ matrix.arch }}.tar.gz.sha256
+        run: shasum -a 256 devlayer-darwin-${{ matrix.arch }}.tar.gz > devlayer-darwin-${{ matrix.arch }}.tar.gz.sha256
 
       - name: Attest build provenance
         if: github.event_name == 'release' && github.event.repository.visibility == 'public'
         uses: actions/attest-build-provenance@a2bbfa25375fe432b6a289bc6b6cd05ecd0c4c32 # v2.1.0
         with:
-          subject-path: dotpack-darwin-${{ matrix.arch }}.tar.gz
+          subject-path: devlayer-darwin-${{ matrix.arch }}.tar.gz
 
       - name: Upload to release
         if: github.event_name == 'release'
@@ -244,8 +279,8 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh release upload "${{ github.event.release.tag_name }}" \
-            dotpack-darwin-${{ matrix.arch }}.tar.gz \
-            dotpack-darwin-${{ matrix.arch }}.tar.gz.sha256
+            devlayer-darwin-${{ matrix.arch }}.tar.gz \
+            devlayer-darwin-${{ matrix.arch }}.tar.gz.sha256
 
   # Build Windows tool bundle
   windows:
@@ -254,54 +289,56 @@ jobs:
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
-      - uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v5.5.0
+      - name: Cache Bazel
+        uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
         with:
-          go-version-file: go.mod
+          path: |
+            ~/.cache/bazel
+            ~/.cache/bazelisk
+          key: bazel-windows-bundle-${{ hashFiles('.bazelversion', 'MODULE.bazel', 'MODULE.bazel.lock') }}
+          restore-keys: bazel-windows-bundle-
 
-      - name: Build dotpack CLI
-        run: |
-          $version = "${{ github.event.release.tag_name }}"
-          if (-not $version) { $version = "ci" }
-          go build -ldflags "-s -w -X main.Version=$version" -o dotpack.exe .
+      - name: Build devlayer CLI with Bazel
+        run: bazel build //:devlayer
 
       - name: Build Windows bundle
         run: |
-          .\dotpack.exe build --os windows --arch x86_64
-          Get-ChildItem dotpack-windows-x86_64.zip
+          .\bazel-bin\devlayer_\devlayer.exe build --os windows --arch x86_64
+          Get-ChildItem devlayer-windows-x86_64.zip
 
       - name: Verify bundle
         shell: bash
         run: |
-          mkdir -p /tmp/dotpack-verify
-          unzip -qo dotpack-windows-*.zip -d /tmp/dotpack-verify
+          mkdir -p /tmp/devlayer-verify
+          unzip -qo devlayer-windows-*.zip -d /tmp/devlayer-verify
 
           echo "==> Verifying .cmd wrappers..."
           for f in git nvim go gofmt; do
-            test -f "/tmp/dotpack-verify/bin/$f.cmd" || { echo "FAIL: bin/$f.cmd not found"; exit 1; }
-            grep -q '@echo off' "/tmp/dotpack-verify/bin/$f.cmd" || { echo "FAIL: bin/$f.cmd missing @echo off"; exit 1; }
+            test -f "/tmp/devlayer-verify/bin/$f.cmd" || { echo "FAIL: bin/$f.cmd not found"; exit 1; }
+            grep -q '@echo off' "/tmp/devlayer-verify/bin/$f.cmd" || { echo "FAIL: bin/$f.cmd missing @echo off"; exit 1; }
             echo "  bin/$f.cmd: wrapper ok"
           done
 
-          grep -q 'GIT_EXEC_PATH' /tmp/dotpack-verify/bin/git.cmd || { echo "FAIL: git.cmd missing GIT_EXEC_PATH"; exit 1; }
-          grep -q 'GOROOT' /tmp/dotpack-verify/bin/go.cmd || { echo "FAIL: go.cmd missing GOROOT"; exit 1; }
-          grep -q 'VIMRUNTIME' /tmp/dotpack-verify/bin/nvim.cmd || { echo "FAIL: nvim.cmd missing VIMRUNTIME"; exit 1; }
+          grep -q 'GIT_EXEC_PATH' /tmp/devlayer-verify/bin/git.cmd || { echo "FAIL: git.cmd missing GIT_EXEC_PATH"; exit 1; }
+          grep -q 'GOROOT' /tmp/devlayer-verify/bin/go.cmd || { echo "FAIL: go.cmd missing GOROOT"; exit 1; }
+          grep -q 'VIMRUNTIME' /tmp/devlayer-verify/bin/nvim.cmd || { echo "FAIL: nvim.cmd missing VIMRUNTIME"; exit 1; }
 
           echo "==> Verifying MinGit..."
-          test -f "/tmp/dotpack-verify/git/cmd/git.exe" || { echo "FAIL: git/cmd/git.exe not found"; exit 1; }
+          test -f "/tmp/devlayer-verify/git/cmd/git.exe" || { echo "FAIL: git/cmd/git.exe not found"; exit 1; }
           echo "  git/cmd/git.exe: ok"
 
           echo "==> All checks passed."
 
       - name: Generate checksum
         run: |
-          $hash = (Get-FileHash -Path dotpack-windows-x86_64.zip -Algorithm SHA256).Hash.ToLower()
-          "$hash  dotpack-windows-x86_64.zip" | Out-File -FilePath dotpack-windows-x86_64.zip.sha256 -Encoding ascii -NoNewline
+          $hash = (Get-FileHash -Path devlayer-windows-x86_64.zip -Algorithm SHA256).Hash.ToLower()
+          "$hash  devlayer-windows-x86_64.zip" | Out-File -FilePath devlayer-windows-x86_64.zip.sha256 -Encoding ascii -NoNewline
 
       - name: Attest build provenance
         if: github.event_name == 'release' && github.event.repository.visibility == 'public'
         uses: actions/attest-build-provenance@a2bbfa25375fe432b6a289bc6b6cd05ecd0c4c32 # v2.1.0
         with:
-          subject-path: dotpack-windows-x86_64.zip
+          subject-path: devlayer-windows-x86_64.zip
 
       - name: Upload to release
         if: github.event_name == 'release'
@@ -310,8 +347,8 @@ jobs:
         shell: bash
         run: |
           gh release upload "${{ github.event.release.tag_name }}" \
-            dotpack-windows-x86_64.zip \
-            dotpack-windows-x86_64.zip.sha256
+            devlayer-windows-x86_64.zip \
+            devlayer-windows-x86_64.zip.sha256
 
   # Upload install scripts (release only)
   upload-installer:

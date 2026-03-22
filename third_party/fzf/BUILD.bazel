@@ -1,0 +1,17 @@
+# fzf — fuzzy finder (pre-built binary + shell integration)
+alias(
+    name = "fzf",
+    actual = select({
+        "//tools:linux_amd64": "@fzf_linux_amd64//:fzf",
+        "//tools:linux_arm64": "@fzf_linux_arm64//:fzf",
+        "//tools:darwin_arm64": "@fzf_darwin_arm64//:fzf",
+    }),
+    visibility = ["//visibility:public"],
+)
+
+# Shell integration scripts (key-bindings.zsh, completion.zsh)
+alias(
+    name = "shell",
+    actual = "@fzf_shell//:shell_scripts",
+    visibility = ["//visibility:public"],
+)

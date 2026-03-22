@@ -1,0 +1,102 @@
+module(
+    name = "devlayer",
+    version = "0.0.0",
+)
+
+# ─── Go ──────────────────────────────────────────────────────────────────────
+bazel_dep(name = "rules_go", version = "0.60.0")
+bazel_dep(name = "gazelle", version = "0.47.0")
+
+go_sdk = use_extension("@rules_go//go:extensions.bzl", "go_sdk")
+go_sdk.download(version = "1.23.3")
+
+go_deps = use_extension("@gazelle//:extensions.bzl", "go_deps")
+go_deps.from_file(go_mod = "//:go.mod")
+use_repo(
+    go_deps,
+    "com_github_burntsushi_toml",
+    "com_github_charmbracelet_lipgloss",
+)
+
+# ─── Hermetic C/C++ toolchain (zig-based) ───────────────────────────────────
+bazel_dep(name = "hermetic_cc_toolchain", version = "4.1.0")
+
+toolchains = use_extension("@hermetic_cc_toolchain//toolchain:ext.bzl", "toolchains")
+toolchains.exec_platform(os = "linux", arch = "amd64")
+toolchains.exec_platform(os = "linux", arch = "arm64")
+toolchains.exec_platform(os = "macos", arch = "amd64")
+toolchains.exec_platform(os = "macos", arch = "arm64")
+use_repo(toolchains, "zig_sdk")
+
+# Hermetic CC is opt-in via .bazelrc configs (--config=linux-x86_64-musl etc.)
+# Not registered globally because zig-cc lacks macOS SDK headers needed
+# for tools like btop that use CoreFoundation/IOKit frameworks.
+
+# ─── Platforms ───────────────────────────────────────────────────────────────
+bazel_dep(name = "platforms", version = "1.0.0")
+
+# ─── Foreign CC (cmake/autotools builds) ────────────────────────────────────
+bazel_dep(name = "rules_foreign_cc", version = "0.14.0")
+
+# ─── Third-party tools (sources, pre-built binaries, shell assets) ─────────
+tool_repos = use_extension("//tools:extensions.bzl", "tool_repos")
+use_repo(
+    tool_repos,
+    # Source builds
+    "btop_src",
+    "git_src",
+    "htop_src",
+    "make_src",
+    "ncurses_src",
+    "zsh_src",
+    # Pre-built Rust tools (per platform)
+    "bat_linux_amd64",
+    "bat_linux_arm64",
+    "bat_darwin_arm64",
+    "delta_linux_amd64",
+    "delta_linux_arm64",
+    "delta_darwin_arm64",
+    "dust_linux_amd64",
+    "dust_linux_arm64",
+    "dust_darwin_arm64",
+    "fd_linux_amd64",
+    "fd_linux_arm64",
+    "fd_darwin_arm64",
+    "rg_linux_amd64",
+    "rg_linux_arm64",
+    "rg_darwin_arm64",
+    # Pre-built Go tools (per platform)
+    "age_linux_amd64",
+    "age_linux_arm64",
+    "age_darwin_arm64",
+    "fzf_linux_amd64",
+    "fzf_linux_arm64",
+    "fzf_darwin_arm64",
+    "lazygit_linux_amd64",
+    "lazygit_linux_arm64",
+    "lazygit_darwin_arm64",
+    # Single-binary tools (per platform)
+    "direnv_linux_amd64",
+    "direnv_linux_arm64",
+    "direnv_darwin_arm64",
+    "jq_linux_amd64",
+    "jq_linux_arm64",
+    "jq_darwin_arm64",
+    # SDKs / runtimes (per platform)
+    "go_sdk_linux_amd64",
+    "go_sdk_linux_arm64",
+    "go_sdk_darwin_arm64",
+    "nvim_linux_amd64",
+    "nvim_darwin_arm64",
+    "zig_linux_amd64",
+    "zig_linux_arm64",
+    "zig_darwin_arm64",
+    # Shell assets
+    "bat_extras",
+    "eza_theme",
+    "fast_syntax_highlighting",
+    "fzf_shell",
+    "powerlevel10k",
+    "zsh_autosuggestions",
+    "zsh_history_substring_search",
+)

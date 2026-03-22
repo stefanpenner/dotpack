@@ -61,7 +61,7 @@ devlayer versions                 # Print bundled tool versions
 | fd | yes | yes | yes |
 | bat | yes | yes | yes |
 | rg (ripgrep) | yes | yes | yes |
-| lsd | yes | yes | yes |
+| eza (ls) | yes | yes | yes |
 | delta | yes | yes | yes |
 | jq | yes | yes | yes |
 | direnv | yes | yes | yes |
@@ -193,12 +193,10 @@ A weekly GHA workflow also checks for new upstream versions and opens PRs automa
 ## Building from source
 
 ```bash
-make build-go          # Build the devlayer CLI
-make build             # Build linux bundle (Docker)
-make build-darwin      # Build macOS bundle
-make build-windows     # Build Windows bundle
-make install           # Install locally
-make test              # Run tests on all platforms
+bazel build //:devlayer                # Build the devlayer CLI
+bazel build //third_party/btop         # Build btop from source
+bazel build //third_party/make:gnumake # Build GNU make from source
+bazel test //...                       # Run all tests
 ```
 
-Requires Go 1.21+ and Docker (for Linux builds only). macOS builds compile nvim, htop, and btop from source and require cmake, ninja, autoconf, automake, and libtool (install via `brew install cmake ninja autoconf automake libtool`).
+Requires [Bazel](https://bazel.build/) (or [Bazelisk](https://github.com/bazelbuild/bazelisk)). The build uses `hermetic_cc_toolchain` (zig-based) for reproducible C/C++ compilation and `rules_foreign_cc` for cmake/autotools projects.

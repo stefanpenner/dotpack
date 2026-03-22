@@ -1,0 +1,14 @@
+load("@rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "nvimplugins",
+    srcs = ["nvimplugins.go"],
+    importpath = "github.com/stefanpenner/devlayer/internal/nvimplugins",
+    visibility = ["//:__subpackages__"],
+)
+
+go_test(
+    name = "nvimplugins_test",
+    srcs = ["nvimplugins_test.go"],
+    embed = [":nvimplugins"],
+)

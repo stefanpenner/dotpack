@@ -1,14 +1,14 @@
-# Dotpack installer for Windows
-# Usage: irm https://raw.githubusercontent.com/stefanpenner/dotpack/master/scripts/install.ps1 | iex
+# Devlayer installer for Windows
+# Usage: irm https://raw.githubusercontent.com/stefanpenner/devlayer/master/scripts/install.ps1 | iex
 
 $ErrorActionPreference = "Stop"
 
-$Repo = if ($env:DOTPACK_REPO) { $env:DOTPACK_REPO } else { "stefanpenner/dotpack" }
-$Version = if ($env:DOTPACK_VERSION) { $env:DOTPACK_VERSION } else { "latest" }
-$InstallDir = if ($env:DOTPACK_DIR) { $env:DOTPACK_DIR } else { Join-Path $env:LOCALAPPDATA "dotpack" }
+$Repo = if ($env:DEVLAYER_REPO) { $env:DEVLAYER_REPO } else { "stefanpenner/devlayer" }
+$Version = if ($env:DEVLAYER_VERSION) { $env:DEVLAYER_VERSION } else { "latest" }
+$InstallDir = if ($env:DEVLAYER_DIR) { $env:DEVLAYER_DIR } else { Join-Path $env:LOCALAPPDATA "devlayer" }
 $Arch = "x86_64"
 
-$Asset = "dotpack-windows-$Arch.zip"
+$Asset = "devlayer-windows-$Arch.zip"
 
 if ($Version -eq "latest") {
     $BaseUrl = "https://github.com/$Repo/releases/latest/download"
@@ -16,11 +16,11 @@ if ($Version -eq "latest") {
     $BaseUrl = "https://github.com/$Repo/releases/download/$Version"
 }
 
-Write-Host "dotpack: installing $Version for windows/$Arch"
+Write-Host "devlayer: installing $Version for windows/$Arch"
 Write-Host "  target: $InstallDir"
 
 # Download
-$TmpDir = Join-Path ([System.IO.Path]::GetTempPath()) "dotpack-install-$([System.Guid]::NewGuid())"
+$TmpDir = Join-Path ([System.IO.Path]::GetTempPath()) "devlayer-install-$([System.Guid]::NewGuid())"
 New-Item -ItemType Directory -Path $TmpDir -Force | Out-Null
 
 try {
@@ -52,7 +52,7 @@ try {
 }
 
 Write-Host ""
-Write-Host "dotpack installed to $InstallDir"
+Write-Host "devlayer installed to $InstallDir"
 Write-Host ""
 
 # Add to PATH if not already there

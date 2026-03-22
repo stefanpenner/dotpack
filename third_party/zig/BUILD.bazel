@@ -1,0 +1,10 @@
+# Zig compiler (C/C++ toolchain) — pre-built
+alias(
+    name = "zig",
+    actual = select({
+        "//tools:linux_amd64": "@zig_linux_amd64//:all",
+        "//tools:linux_arm64": "@zig_linux_arm64//:all",
+        "//tools:darwin_arm64": "@zig_darwin_arm64//:all",
+    }),
+    visibility = ["//visibility:public"],
+)

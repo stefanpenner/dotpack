@@ -12,11 +12,13 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/stefanpenner/dotpack/internal/archive"
-	"github.com/stefanpenner/dotpack/internal/docker"
-	"github.com/stefanpenner/dotpack/internal/download"
-	"github.com/stefanpenner/dotpack/internal/platform"
-	"github.com/stefanpenner/dotpack/internal/versions"
+	"github.com/stefanpenner/devlayer/internal/archive"
+	"github.com/stefanpenner/devlayer/internal/config"
+	"github.com/stefanpenner/devlayer/internal/docker"
+	"github.com/stefanpenner/devlayer/internal/download"
+	"github.com/stefanpenner/devlayer/internal/nvimplugins"
+	"github.com/stefanpenner/devlayer/internal/platform"
+	"github.com/stefanpenner/devlayer/internal/versions"
 )
 
 // buildOptions holds flags parsed from the build command line.
@@ -26,7 +28,7 @@ type buildOptions struct {
 	nvimHead bool // build nvim from HEAD instead of stable/pinned version
 }
 
-// Build builds a dotpack bundle for the given OS and architecture.
+// Build builds a devlayer bundle for the given OS and architecture.
 func Build(args []string, vers *versions.Versions, scriptDir string) error {
 	opts := buildOptions{
 		os:   "linux",
@@ -61,12 +63,28 @@ func Build(args []string, vers *versions.Versions, scriptDir string) error {
 
 	switch opts.os {
 	case "darwin":
-		return buildDarwin(opts, vers, scriptDir)
+		if err := buildDarwin(opts, vers, scriptDir); err != nil {
+			return err
+		}
 	case "windows":
-		return buildWindows(opts.arch, vers, scriptDir)
+		if err := buildWindows(opts.arch, vers, scriptDir); err != nil {
+			return err
+		}
 	default:
-		return buildLinux(opts.arch, scriptDir)
+		if err := buildLinux(opts.arch, scriptDir); err != nil {
+			return err
+		}
 	}
+
+	// Build dotfiles and nvim plugins (platform-independent)
+	if err := buildDotfiles(scriptDir); err != nil {
+		return err
+	}
+	if err := buildNvimPlugins(scriptDir); err != nil {
+		return err
+	}
+
+	return nil
 }
 
 func buildDarwin(opts buildOptions, vers *versions.Versions, scriptDir string) error {
@@ -77,9 +95,9 @@ func buildDarwin(opts buildOptions, vers *versions.Versions, scriptDir string) e
 
 	// Use ArchGeneric for display and filenames (arm64, not aarch64, for darwin)
 	displayArch := p.ArchGeneric
-	fmt.Printf("==> Building dotpack for darwin/%s...\n", displayArch)
+	fmt.Printf("==> Building devlayer for darwin/%s...\n", displayArch)
 
-	out, err := os.MkdirTemp("", "dotpack-build-*")
+	out, err := os.MkdirTemp("", "devlayer-build-*")
 	if err != nil {
 		return err
 	}
@@ -109,21 +127,56 @@ func buildDarwin(opts buildOptions, vers *versions.Versions, scriptDir string) e
 		return err
 	}
 
+	// Build eza from source (no pre-built macOS binary)
+	libexecDir := filepath.Join(out, "libexec")
+	if err := os.MkdirAll(libexecDir, 0755); err != nil {
+		return fmt.Errorf("mkdir libexec: %w", err)
+	}
+	if err := buildEza(libexecDir, vers); err != nil {
+		return err
+	}
+
+	// Build make from source
+	if err := buildMake(binDir, vers); err != nil {
+		return err
+	}
+
 	// Create wrapper scripts in bin/ for tools with runtime dependencies
 	wrappers := []wrapper{
 		{"nvim", "nvim/bin/nvim", map[string]string{"VIMRUNTIME": "$PREFIX/nvim/share/nvim/runtime"}},
 		{"go", "go/bin/go", map[string]string{"GOROOT": "$PREFIX/go"}},
 		{"gofmt", "go/bin/gofmt", map[string]string{"GOROOT": "$PREFIX/go"}},
+		{"zig", "zig/zig", nil},
+	}
+
+	// Create eza wrapper that sets EZA_CONFIG_DIR for tokyo-night theme
+	// Real binary lives in libexec/eza to avoid naming conflict with wrapper
+	ezaWrapper := `#!/bin/sh
+PREFIX="$(cd "$(dirname "$0")/.." && pwd)"
+export EZA_CONFIG_DIR="$PREFIX/share/eza"
+exec "$PREFIX/libexec/eza" "$@"
+`
+	if err := os.WriteFile(filepath.Join(binDir, "eza"), []byte(ezaWrapper), 0755); err != nil {
+		return fmt.Errorf("wrapper eza: %w", err)
+	}
+	// Create ls alias that delegates to eza
+	if err := os.WriteFile(filepath.Join(binDir, "ls"), []byte(ezaWrapper), 0755); err != nil {
+		return fmt.Errorf("wrapper ls: %w", err)
 	}
 	if err := createUnixWrappers(binDir, wrappers); err != nil {
 		return err
 	}
 
+	// Create cc/c++ convenience wrappers that delegate to zig
+	if err := createZigCCWrappers(binDir); err != nil {
+		return err
+	}
+
 	// Copy self into bundle
 	if self, err := os.Executable(); err == nil {
-		fmt.Println("  dotpack")
-		if err := copyFile(self, filepath.Join(binDir, "dotpack")); err != nil {
-			return fmt.Errorf("copy dotpack: %w", err)
+		fmt.Println("  devlayer")
+		if err := copyFile(self, filepath.Join(binDir, "devlayer")); err != nil {
+			return fmt.Errorf("copy devlayer: %w", err)
 		}
 	}
 
@@ -132,7 +185,7 @@ func buildDarwin(opts buildOptions, vers *versions.Versions, scriptDir string) e
 		return err
 	}
 
-	outputFile := filepath.Join(scriptDir, fmt.Sprintf("dotpack-darwin-%s.tar.gz", displayArch))
+	outputFile := filepath.Join(scriptDir, fmt.Sprintf("devlayer-darwin-%s.tar.gz", displayArch))
 	if err := archive.CreateTarGz(outputFile, out); err != nil {
 		return err
 	}
@@ -148,9 +201,9 @@ func buildWindows(arch string, vers *versions.Versions, scriptDir string) error 
 		return err
 	}
 
-	fmt.Printf("==> Building dotpack for windows/%s...\n", p.ArchGeneric)
+	fmt.Printf("==> Building devlayer for windows/%s...\n", p.ArchGeneric)
 
-	out, err := os.MkdirTemp("", "dotpack-build-*")
+	out, err := os.MkdirTemp("", "devlayer-build-*")
 	if err != nil {
 		return err
 	}
@@ -173,20 +226,26 @@ func buildWindows(arch string, vers *versions.Versions, scriptDir string) error 
 		{"nvim", `nvim\bin\nvim.exe`, map[string]string{"VIMRUNTIME": `%PREFIX%\nvim\share\nvim\runtime`}},
 		{"go", `go\bin\go.exe`, map[string]string{"GOROOT": `%PREFIX%\go`}},
 		{"gofmt", `go\bin\gofmt.exe`, map[string]string{"GOROOT": `%PREFIX%\go`}},
+		{"zig", `zig\zig.exe`, nil},
 	}
 	if err := createWindowsWrappers(binDir, wrappers); err != nil {
 		return err
 	}
 
+	// Create cc/c++ wrappers for Windows
+	if err := createZigCCWrappersWindows(binDir); err != nil {
+		return err
+	}
+
 	// Copy self into bundle
 	if self, err := os.Executable(); err == nil {
-		fmt.Println("  dotpack")
-		destName := "dotpack"
+		fmt.Println("  devlayer")
+		destName := "devlayer"
 		if runtime.GOOS == "windows" {
-			destName = "dotpack.exe"
+			destName = "devlayer.exe"
 		}
 		if err := copyFile(self, filepath.Join(binDir, destName)); err != nil {
-			return fmt.Errorf("copy dotpack: %w", err)
+			return fmt.Errorf("copy devlayer: %w", err)
 		}
 	}
 
@@ -195,7 +254,7 @@ func buildWindows(arch string, vers *versions.Versions, scriptDir string) error 
 		return err
 	}
 
-	outputFile := filepath.Join(scriptDir, fmt.Sprintf("dotpack-windows-%s.zip", p.ArchGeneric))
+	outputFile := filepath.Join(scriptDir, fmt.Sprintf("devlayer-windows-%s.zip", p.ArchGeneric))
 	if err := archive.CreateZip(outputFile, out); err != nil {
 		return err
 	}
@@ -206,19 +265,19 @@ func buildWindows(arch string, vers *versions.Versions, scriptDir string) error 
 }
 
 func buildLinux(arch, scriptDir string) error {
-	fmt.Printf("==> Building dotpack for linux/%s (Docker)...\n", arch)
+	fmt.Printf("==> Building devlayer for linux/%s (Docker)...\n", arch)
 
 	p, err := platform.New("linux", arch)
 	if err != nil {
 		return err
 	}
 
-	if err := docker.Build(p.DockerPlatform, "dotpack", scriptDir); err != nil {
+	if err := docker.Build(p.DockerPlatform, "devlayer", scriptDir); err != nil {
 		return fmt.Errorf("docker build: %w", err)
 	}
 
-	outputFile := filepath.Join(scriptDir, fmt.Sprintf("dotpack-linux-%s.tar.gz", arch))
-	if err := docker.RunToFile("dotpack", outputFile); err != nil {
+	outputFile := filepath.Join(scriptDir, fmt.Sprintf("devlayer-linux-%s.tar.gz", arch))
+	if err := docker.RunToFile("devlayer", outputFile); err != nil {
 		return fmt.Errorf("docker run: %w", err)
 	}
 
@@ -232,7 +291,7 @@ func buildBtop(binDir string, vers *versions.Versions) error {
 	ver := vers.Get("BTOP_VERSION")
 	fmt.Println("  btop (building from source)")
 
-	srcDir, err := os.MkdirTemp("", "dotpack-btop-*")
+	srcDir, err := os.MkdirTemp("", "devlayer-btop-*")
 	if err != nil {
 		return err
 	}
@@ -304,7 +363,7 @@ func buildNvim(outDir string, vers *versions.Versions, head bool) error {
 	}
 	fmt.Printf("  nvim (building %s from source)\n", label)
 
-	srcDir, err := os.MkdirTemp("", "dotpack-nvim-*")
+	srcDir, err := os.MkdirTemp("", "devlayer-nvim-*")
 	if err != nil {
 		return err
 	}
@@ -358,7 +417,7 @@ func buildHtop(binDir string, vers *versions.Versions) error {
 	ver := vers.Get("HTOP_VERSION")
 	fmt.Println("  htop (building from source)")
 
-	srcDir, err := os.MkdirTemp("", "dotpack-htop-*")
+	srcDir, err := os.MkdirTemp("", "devlayer-htop-*")
 	if err != nil {
 		return err
 	}
@@ -420,14 +479,13 @@ func downloadAll(out string, p *platform.Platform, vers *versions.Versions, skip
 	}{
 		{"fd", "sharkdp/fd", "fd-v%s-%s", false},
 		{"bat", "sharkdp/bat", "bat-v%s-%s", false},
-		{"lsd", "lsd-rs/lsd", "lsd-v%s-%s", false},
 		{"rg", "BurntSushi/ripgrep", "ripgrep-%s-%s", true},
 		{"delta", "dandavison/delta", "delta-%s-%s", true},
 		{"dust", "bootandy/dust", "dust-v%s-%s", true},
 	}
 
 	versionKeys := map[string]string{
-		"fd": "FD_VERSION", "bat": "BAT_VERSION", "lsd": "LSD_VERSION",
+		"fd": "FD_VERSION", "bat": "BAT_VERSION",
 		"rg": "RG_VERSION", "delta": "DELTA_VERSION", "dust": "DUST_VERSION",
 	}
 
@@ -444,7 +502,7 @@ func downloadAll(out string, p *platform.Platform, vers *versions.Versions, skip
 		}
 		archiveName := fmt.Sprintf(t.prefix, ver, target)
 		vPrefix := ver
-		if t.name == "fd" || t.name == "bat" || t.name == "lsd" || t.name == "dust" {
+		if t.name == "fd" || t.name == "bat" || t.name == "dust" {
 			vPrefix = "v" + ver
 		}
 		url := fmt.Sprintf("https://github.com/%s/releases/download/%s/%s.%s", t.repo, vPrefix, archiveName, archiveExt)
@@ -461,6 +519,22 @@ func downloadAll(out string, p *platform.Platform, vers *versions.Versions, skip
 				return fmt.Errorf("download %s: %w", t.name, err)
 			}
 		}
+	}
+
+	// eza (ls replacement) — built from source on macOS/Linux, download on Windows
+	if !skip["eza"] && p.IsWindows() {
+		ezaVer := vers.Get("EZA_VERSION")
+		ezaTarget := p.RustTargetFor("eza")
+		ezaURL := fmt.Sprintf("https://github.com/eza-community/eza/releases/download/v%s/eza.exe_%s.zip",
+			ezaVer, ezaTarget)
+		if err := download.ZipBinary(ezaURL, binDir, "eza.exe"); err != nil {
+			return fmt.Errorf("download eza: %w", err)
+		}
+	}
+
+	// eza tokyo-night theme
+	if err := downloadEzaTheme(out); err != nil {
+		return fmt.Errorf("eza theme: %w", err)
 	}
 
 	// Go tools
@@ -591,6 +665,27 @@ func downloadAll(out string, p *platform.Platform, vers *versions.Versions, skip
 		}
 	}
 
+	// Zig (C/C++ compiler)
+	zigVer := vers.Get("ZIG_VERSION")
+	zigArch := p.RustArch // zig uses x86_64/aarch64
+	zigExt := "tar.xz"
+	if p.IsWindows() {
+		zigExt = "zip"
+	}
+	zigURL := fmt.Sprintf("https://ziglang.org/download/%s/zig-%s-%s-%s.%s",
+		zigVer, zigArch, p.ZigOS, zigVer, zigExt)
+	fmt.Println("  zig")
+	zigDir := filepath.Join(out, "zig")
+	if zigExt == "zip" {
+		if err := download.ZipFull(zigURL, zigDir, 1); err != nil {
+			return fmt.Errorf("download zig: %w", err)
+		}
+	} else {
+		if err := download.TarXzFull(zigURL, zigDir, 1); err != nil {
+			return fmt.Errorf("download zig: %w", err)
+		}
+	}
+
 	// Git for Windows (MinGit portable)
 	if p.IsWindows() {
 		gitWinVer := vers.Get("GIT_WINDOWS_VERSION")
@@ -619,7 +714,7 @@ func downloadAll(out string, p *platform.Platform, vers *versions.Versions, skip
 			return err
 		}
 		fzfSrcURL := fmt.Sprintf("https://github.com/junegunn/fzf/archive/refs/tags/v%s.tar.gz", fzfVer)
-		fzfTmp, err := os.MkdirTemp("", "dotpack-fzf-*")
+		fzfTmp, err := os.MkdirTemp("", "devlayer-fzf-*")
 		if err != nil {
 			return err
 		}
@@ -682,6 +777,271 @@ func downloadAll(out string, p *platform.Platform, vers *versions.Versions, skip
 	}
 	fmt.Println()
 	return nil
+}
+
+// buildEza compiles eza from source using cargo.
+func buildEza(binDir string, vers *versions.Versions) error {
+	ver := vers.Get("EZA_VERSION")
+	fmt.Println("  eza (building from source)")
+
+	srcDir, err := os.MkdirTemp("", "devlayer-eza-*")
+	if err != nil {
+		return err
+	}
+	defer os.RemoveAll(srcDir)
+
+	// Clone source at the pinned version
+	srcRoot := filepath.Join(srcDir, "eza")
+	clone := exec.Command("git", "clone", "--depth", "1", "--branch", "v"+ver,
+		"https://github.com/eza-community/eza.git", srcRoot)
+	clone.Stdout = os.Stdout
+	clone.Stderr = os.Stderr
+	if err := clone.Run(); err != nil {
+		return fmt.Errorf("eza git clone: %w", err)
+	}
+
+	// Build with cargo
+	build := exec.Command("cargo", "build", "--release")
+	build.Dir = srcRoot
+	build.Stdout = os.Stdout
+	build.Stderr = os.Stderr
+	if err := build.Run(); err != nil {
+		return fmt.Errorf("eza cargo build: %w", err)
+	}
+
+	// Copy binary
+	if err := copyFile(filepath.Join(srcRoot, "target", "release", "eza"), filepath.Join(binDir, "eza")); err != nil {
+		return fmt.Errorf("copy eza: %w", err)
+	}
+
+	return nil
+}
+
+// downloadEzaTheme downloads the tokyo-night theme for eza into the share directory.
+func downloadEzaTheme(outDir string) error {
+	fmt.Println("  eza tokyo-night theme")
+	ezaConfigDir := filepath.Join(outDir, "share", "eza")
+	if err := os.MkdirAll(ezaConfigDir, 0755); err != nil {
+		return err
+	}
+
+	themeURL := "https://raw.githubusercontent.com/eza-community/eza-themes/main/themes/tokyonight.yml"
+	return download.File(themeURL, filepath.Join(ezaConfigDir, "theme.yml"))
+}
+
+// buildMake compiles GNU make from source.
+func buildMake(binDir string, vers *versions.Versions) error {
+	ver := vers.Get("MAKE_VERSION")
+	fmt.Println("  make (building from source)")
+
+	srcDir, err := os.MkdirTemp("", "devlayer-make-*")
+	if err != nil {
+		return err
+	}
+	defer os.RemoveAll(srcDir)
+
+	url := fmt.Sprintf("https://ftp.gnu.org/gnu/make/make-%s.tar.gz", ver)
+	if err := download.TarGzFull(url, srcDir, 0); err != nil {
+		return fmt.Errorf("download make source: %w", err)
+	}
+
+	// Find extracted directory
+	entries, err := os.ReadDir(srcDir)
+	if err != nil {
+		return err
+	}
+	var srcRoot string
+	for _, e := range entries {
+		if e.IsDir() && strings.HasPrefix(e.Name(), "make-") {
+			srcRoot = filepath.Join(srcDir, e.Name())
+			break
+		}
+	}
+	if srcRoot == "" {
+		return fmt.Errorf("make source directory not found")
+	}
+
+	// configure
+	configure := exec.Command("./configure", "CFLAGS=-Os -DNDEBUG")
+	configure.Dir = srcRoot
+	configure.Stdout = os.Stdout
+	configure.Stderr = os.Stderr
+	if err := configure.Run(); err != nil {
+		return fmt.Errorf("make configure: %w", err)
+	}
+
+	// build
+	build := exec.Command("make", fmt.Sprintf("-j%d", runtime.NumCPU()))
+	build.Dir = srcRoot
+	build.Stdout = os.Stdout
+	build.Stderr = os.Stderr
+	if err := build.Run(); err != nil {
+		return fmt.Errorf("make build: %w", err)
+	}
+
+	// copy binary
+	if err := copyFile(filepath.Join(srcRoot, "make"), filepath.Join(binDir, "make")); err != nil {
+		return fmt.Errorf("copy make: %w", err)
+	}
+
+	return nil
+}
+
+// createZigCCWrappers creates cc and c++ wrapper scripts that delegate to zig.
+func createZigCCWrappers(binDir string) error {
+	ccScript := `#!/bin/sh
+PREFIX="$(cd "$(dirname "$0")/.." && pwd)"
+exec "$PREFIX/zig/zig" cc "$@"
+`
+	cxxScript := `#!/bin/sh
+PREFIX="$(cd "$(dirname "$0")/.." && pwd)"
+exec "$PREFIX/zig/zig" c++ "$@"
+`
+	if err := os.WriteFile(filepath.Join(binDir, "cc"), []byte(ccScript), 0755); err != nil {
+		return err
+	}
+	return os.WriteFile(filepath.Join(binDir, "c++"), []byte(cxxScript), 0755)
+}
+
+// createZigCCWrappersWindows creates cc.cmd and c++.cmd wrappers for Windows.
+func createZigCCWrappersWindows(binDir string) error {
+	ccScript := "@echo off\r\n\"%~dp0..\\zig\\zig.exe\" cc %*\r\n"
+	cxxScript := "@echo off\r\n\"%~dp0..\\zig\\zig.exe\" c++ %*\r\n"
+	if err := os.WriteFile(filepath.Join(binDir, "cc.cmd"), []byte(ccScript), 0755); err != nil {
+		return err
+	}
+	return os.WriteFile(filepath.Join(binDir, "c++.cmd"), []byte(cxxScript), 0755)
+}
+
+// buildDotfiles reads the config and creates a dotfiles tarball.
+// Skipped silently if no config exists or sync list is empty.
+func buildDotfiles(scriptDir string) error {
+	cfg, err := config.Load()
+	if err != nil {
+		return fmt.Errorf("load config: %w", err)
+	}
+	if len(cfg.Dotfiles.Sync) == 0 {
+		return nil
+	}
+
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return err
+	}
+
+	fmt.Println("==> Packaging dotfiles...")
+
+	staging, err := os.MkdirTemp("", "devlayer-dotfiles-*")
+	if err != nil {
+		return err
+	}
+	defer os.RemoveAll(staging)
+
+	for _, rel := range cfg.Dotfiles.Sync {
+		src := filepath.Join(home, rel)
+		dst := filepath.Join(staging, rel)
+
+		info, err := os.Stat(src)
+		if os.IsNotExist(err) {
+			fmt.Printf("  skipped (not found): %s\n", rel)
+			continue
+		}
+		if err != nil {
+			return err
+		}
+
+		if info.IsDir() {
+			if err := copyDirSimple(src, dst); err != nil {
+				return fmt.Errorf("copy %s: %w", rel, err)
+			}
+		} else {
+			if err := os.MkdirAll(filepath.Dir(dst), 0755); err != nil {
+				return err
+			}
+			if err := copyFile(src, dst); err != nil {
+				return fmt.Errorf("copy %s: %w", rel, err)
+			}
+		}
+		fmt.Printf("  %s\n", rel)
+	}
+
+	outputFile := filepath.Join(scriptDir, "devlayer-dotfiles.tar.gz")
+	if err := archive.CreateTarGz(outputFile, staging); err != nil {
+		return err
+	}
+
+	docker.PrintSize(outputFile)
+	return nil
+}
+
+// buildNvimPlugins copies locally-installed nvim plugins into a tarball.
+// Skipped silently if lazy-lock.json doesn't exist.
+func buildNvimPlugins(scriptDir string) error {
+	lockfile := nvimplugins.LazyLockPath()
+	if _, err := os.Stat(lockfile); os.IsNotExist(err) {
+		return nil
+	}
+
+	fmt.Println("==> Packaging nvim plugins...")
+
+	staging, err := os.MkdirTemp("", "devlayer-nvim-plugins-*")
+	if err != nil {
+		return err
+	}
+	defer os.RemoveAll(staging)
+
+	lazyDir := filepath.Join(staging, "lazy")
+	if err := nvimplugins.SyncPlugins(lockfile, nvimplugins.LocalLazyDir(), lazyDir); err != nil {
+		return fmt.Errorf("sync nvim plugins: %w", err)
+	}
+
+	// Count plugins
+	entries, _ := os.ReadDir(lazyDir)
+	fmt.Printf("  %d plugins\n", len(entries))
+
+	outputFile := filepath.Join(scriptDir, "devlayer-nvim-plugins.tar.gz")
+	if err := archive.CreateTarGz(outputFile, staging); err != nil {
+		return err
+	}
+
+	docker.PrintSize(outputFile)
+	return nil
+}
+
+// copyDirSimple recursively copies a directory, skipping .git directories.
+func copyDirSimple(src, dst string) error {
+	return filepath.WalkDir(src, func(path string, d os.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+
+		if d.IsDir() && d.Name() == ".git" {
+			return filepath.SkipDir
+		}
+
+		rel, err := filepath.Rel(src, path)
+		if err != nil {
+			return err
+		}
+		target := filepath.Join(dst, rel)
+
+		if d.IsDir() {
+			return os.MkdirAll(target, 0755)
+		}
+
+		if d.Type()&os.ModeSymlink != 0 {
+			linkTarget, err := os.Readlink(path)
+			if err != nil {
+				return nil
+			}
+			return os.Symlink(linkTarget, target)
+		}
+
+		if err := os.MkdirAll(filepath.Dir(target), 0755); err != nil {
+			return err
+		}
+		return copyFile(path, target)
+	})
 }
 
 func generateChecksums(dir string) error {
@@ -751,7 +1111,7 @@ func copyFile(src, dst string) error {
 	return err
 }
 
-// FindScriptDir returns the directory containing the dotpack source files.
+// FindScriptDir returns the directory containing the devlayer source files.
 // It checks for the repo checkout first (Dockerfile exists), then falls back
 // to a temp dir with embedded files.
 func FindScriptDir(embeddedDockerfile, embeddedVersionsEnv, embeddedDownloadScript string) (string, bool, error) {
@@ -773,7 +1133,7 @@ func FindScriptDir(embeddedDockerfile, embeddedVersionsEnv, embeddedDownloadScri
 	}
 
 	// Fall back to temp dir with embedded files
-	tmp, err := os.MkdirTemp("", "dotpack-context-*")
+	tmp, err := os.MkdirTemp("", "devlayer-context-*")
 	if err != nil {
 		return "", false, err
 	}
@@ -854,11 +1214,11 @@ func createWindowsWrappers(binDir string, wrappers []wrapper) error {
 func VersionSummary(vers *versions.Versions) string {
 	keys := []struct{ label, key string }{
 		{"fzf", "FZF_VERSION"}, {"fd", "FD_VERSION"}, {"bat", "BAT_VERSION"},
-		{"lsd", "LSD_VERSION"}, {"rg", "RG_VERSION"}, {"delta", "DELTA_VERSION"},
+		{"eza", "EZA_VERSION"}, {"rg", "RG_VERSION"}, {"delta", "DELTA_VERSION"},
 		{"lazygit", "LAZYGIT_VERSION"}, {"jq", "JQ_VERSION"}, {"direnv", "DIRENV_VERSION"},
 		{"nvim", "NVIM_VERSION"}, {"go", "GO_VERSION"}, {"git", "GIT_VERSION"},
 		{"htop", "HTOP_VERSION"}, {"btop", "BTOP_VERSION"}, {"dust", "DUST_VERSION"},
-		{"age", "AGE_VERSION"},
+		{"age", "AGE_VERSION"}, {"zig", "ZIG_VERSION"}, {"make", "MAKE_VERSION"},
 	}
 	var b strings.Builder
 	for _, k := range keys {

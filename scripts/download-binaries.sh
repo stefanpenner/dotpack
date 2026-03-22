@@ -1,5 +1,5 @@
 #!/bin/bash
-# Download pre-built static/musl binaries for dotpack.
+# Download pre-built static/musl binaries for devlayer.
 # Usage: download-binaries.sh <output-dir> [os] [arch]
 #   os defaults to current (linux/darwin)
 #   arch defaults to current machine
@@ -94,7 +94,6 @@ echo "==> Downloading binaries ($OS/$ARCH)"
 # --- Rust tools (musl for Linux, apple-darwin for Mac) ---
 dl_tar "https://github.com/sharkdp/fd/releases/download/v${FD_VERSION}/fd-v${FD_VERSION}-${RUST_TARGET}.tar.gz" fd
 dl_tar "https://github.com/sharkdp/bat/releases/download/v${BAT_VERSION}/bat-v${BAT_VERSION}-${RUST_TARGET}.tar.gz" bat
-dl_tar "https://github.com/lsd-rs/lsd/releases/download/v${LSD_VERSION}/lsd-v${LSD_VERSION}-${RUST_TARGET}.tar.gz" lsd
 dl_tar "https://github.com/BurntSushi/ripgrep/releases/download/${RG_VERSION}/ripgrep-${RG_VERSION}-$(rust_target_for ripgrep).tar.gz" rg
 dl_tar "https://github.com/dandavison/delta/releases/download/${DELTA_VERSION}/delta-${DELTA_VERSION}-$(rust_target_for delta).tar.gz" delta
 dl_tar "https://github.com/bootandy/dust/releases/download/v${DUST_VERSION}/dust-v${DUST_VERSION}-$(rust_target_for dust).tar.gz" dust
@@ -132,6 +131,15 @@ fi
 # --- Go SDK ---
 echo "  go"
 curl -fsSL "https://go.dev/dl/go${GO_VERSION}.${OS}-${GOARCH}.tar.gz" | tar xz -C "$OUT"
+
+# --- Zig (C/C++ compiler) ---
+echo "  zig"
+ZIG_OS="$OS"
+[ "$ZIG_OS" = "darwin" ] && ZIG_OS="macos"
+zig_tmp=$(mktemp -d)
+curl -fsSL "https://ziglang.org/download/${ZIG_VERSION}/zig-${RUST_ARCH}-${ZIG_OS}-${ZIG_VERSION}.tar.xz" | tar xJ -C "$zig_tmp"
+mv "$zig_tmp"/zig-*/ "$OUT/zig"
+rm -rf "$zig_tmp"
 
 # --- fzf shell integration (from source repo) ---
 echo "  fzf shell integration"

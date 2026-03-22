@@ -17,7 +17,7 @@ const autoUpdateInterval = 24 * time.Hour
 // automatically.  Errors are printed but never fatal – normal command
 // execution continues regardless.
 func AutoUpdate(currentVersion string) {
-	if os.Getenv("DOTPACK_NO_AUTOUPDATE") != "" {
+	if os.Getenv("DEVLAYER_NO_AUTOUPDATE") != "" {
 		return
 	}
 
@@ -63,7 +63,7 @@ func autoUpdateStampFile() string {
 			dataHome = filepath.Join(home, ".local", "share")
 		}
 	}
-	return filepath.Join(dataHome, "dotpack", "last-update-check")
+	return filepath.Join(dataHome, "devlayer", "last-update-check")
 }
 
 func shouldAutoUpdate(stampFile string) bool {

@@ -1,0 +1,8 @@
+load("@rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "download",
+    srcs = ["download.go"],
+    importpath = "github.com/stefanpenner/devlayer/internal/download",
+    visibility = ["//:__subpackages__"],
+)

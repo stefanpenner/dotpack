@@ -1,0 +1,25 @@
+# Zsh plugins — shell scripts, no compilation needed.
+
+alias(
+    name = "autosuggestions",
+    actual = "@zsh_autosuggestions//:all",
+    visibility = ["//visibility:public"],
+)
+
+alias(
+    name = "fast_syntax_highlighting",
+    actual = "@fast_syntax_highlighting//:all",
+    visibility = ["//visibility:public"],
+)
+
+alias(
+    name = "history_substring_search",
+    actual = "@zsh_history_substring_search//:all",
+    visibility = ["//visibility:public"],
+)
+
+alias(
+    name = "powerlevel10k",
+    actual = "@powerlevel10k//:all",
+    visibility = ["//visibility:public"],
+)

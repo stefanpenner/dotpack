@@ -1,0 +1,10 @@
+# fd — fast file finder (pre-built binary)
+alias(
+    name = "fd",
+    actual = select({
+        "//tools:linux_amd64": "@fd_linux_amd64//:fd",
+        "//tools:linux_arm64": "@fd_linux_arm64//:fd",
+        "//tools:darwin_arm64": "@fd_darwin_arm64//:fd",
+    }),
+    visibility = ["//visibility:public"],
+)

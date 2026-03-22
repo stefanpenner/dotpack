@@ -5,13 +5,13 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/stefanpenner/dotpack/internal/ssh"
+	"github.com/stefanpenner/devlayer/internal/ssh"
 )
 
-// Push deploys a dotpack bundle to a remote host via SSH.
+// Push deploys a devlayer bundle to a remote host via SSH.
 func Push(host, scriptDir string) error {
 	if host == "" {
-		return fmt.Errorf("usage: dotpack push <host>")
+		return fmt.Errorf("usage: devlayer push <host>")
 	}
 
 	// Get remote architecture
@@ -20,13 +20,13 @@ func Push(host, scriptDir string) error {
 		return fmt.Errorf("failed to detect remote arch: %w", err)
 	}
 
-	tarball := filepath.Join(scriptDir, fmt.Sprintf("dotpack-linux-%s.tar.gz", arch))
+	tarball := filepath.Join(scriptDir, fmt.Sprintf("devlayer-linux-%s.tar.gz", arch))
 	if _, err := os.Stat(tarball); os.IsNotExist(err) {
-		return fmt.Errorf("no bundle found at %s\nRun: dotpack build --arch %s", tarball, arch)
+		return fmt.Errorf("no bundle found at %s\nRun: devlayer build --arch %s", tarball, arch)
 	}
 
 	// Get remote prefix
-	remotePrefix, err := ssh.Run(host, `echo "${DOTPACK_PREFIX:-$HOME/.local}"`)
+	remotePrefix, err := ssh.Run(host, `echo "${DEVLAYER_PREFIX:-$HOME/.local}"`)
 	if err != nil {
 		remotePrefix = "$HOME/.local"
 	}
@@ -42,13 +42,31 @@ func Push(host, scriptDir string) error {
 		return fmt.Errorf("tar extract: %w", err)
 	}
 
+	// Deploy dotfiles (if built)
+	dotfilesTar := filepath.Join(scriptDir, "devlayer-dotfiles.tar.gz")
+	if _, err := os.Stat(dotfilesTar); err == nil {
+		fmt.Println("==> Deploying dotfiles...")
+		if err := ssh.PipeFile(host, dotfilesTar, "tar xzf - -C $HOME"); err != nil {
+			return fmt.Errorf("dotfiles: %w", err)
+		}
+	}
+
+	// Deploy nvim plugins (if built)
+	nvimTar := filepath.Join(scriptDir, "devlayer-nvim-plugins.tar.gz")
+	if _, err := os.Stat(nvimTar); err == nil {
+		fmt.Println("==> Deploying nvim plugins...")
+		if err := ssh.PipeFile(host, nvimTar, "mkdir -p ~/.local/share/nvim && tar xzf - -C ~/.local/share/nvim"); err != nil {
+			return fmt.Errorf("nvim plugins: %w", err)
+		}
+	}
+
 	// Ensure PATH and env are configured (idempotent)
-	hasProfile, _ := ssh.Run(host, `grep -q "dotpack managed PATH" ~/.profile 2>/dev/null && echo yes || echo no`)
+	hasProfile, _ := ssh.Run(host, `grep -q "devlayer managed PATH" ~/.profile 2>/dev/null && echo yes || echo no`)
 	if hasProfile != "yes" {
 		profileBlock := fmt.Sprintf(`
-# dotpack managed PATH
-export DOTPACK_PREFIX="${DOTPACK_PREFIX:-%s}"
-export PATH="$DOTPACK_PREFIX/bin:$PATH"
+# devlayer managed PATH
+export DEVLAYER_PREFIX="${DEVLAYER_PREFIX:-%s}"
+export PATH="$DEVLAYER_PREFIX/bin:$PATH"
 # SSL certs — pick the first existing cert bundle
 for _cert in /etc/ssl/certs/ca-certificates.crt /etc/ssl/cert.pem /etc/pki/tls/certs/ca-bundle.crt; do
   [ -f "$_cert" ] && export GIT_SSL_CAINFO="$_cert" && break

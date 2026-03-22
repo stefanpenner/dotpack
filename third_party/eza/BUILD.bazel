@@ -1,0 +1,31 @@
+load("//tools:versions.bzl", "VERSIONS")
+
+# eza — modern ls replacement
+# Built from source using cargo (requires Rust toolchain + network).
+# Usage: bazel build //third_party/eza --spawn_strategy=local
+genrule(
+    name = "eza",
+    srcs = [],
+    outs = ["eza_bin"],
+    cmd = """
+        set -e
+        CARGO_HOME="$$(echo ~)/.cargo"
+        export PATH="/opt/homebrew/bin:/usr/local/bin:$$CARGO_HOME/bin:$$PATH"
+        OUT=$$(pwd)/$@
+        TMPDIR=$$(mktemp -d)
+        git clone --depth 1 --branch v{ver} https://github.com/eza-community/eza.git $$TMPDIR/src
+        cd $$TMPDIR/src
+        cargo build --release
+        cp target/release/eza $$OUT
+        rm -rf $$TMPDIR
+    """.format(ver = VERSIONS["EZA"]),
+    tags = ["no-sandbox", "requires-network"],
+    visibility = ["//visibility:public"],
+)
+
+# eza tokyo-night theme file
+alias(
+    name = "theme",
+    actual = "@eza_theme//file:theme.yml",
+    visibility = ["//visibility:public"],
+)

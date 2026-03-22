@@ -1,0 +1,7 @@
+# bat-extras — shell script utilities for bat (batman, etc.)
+# The zip contains bin/batman (and other scripts).
+alias(
+    name = "bat_extras",
+    actual = "@bat_extras//:all",
+    visibility = ["//visibility:public"],
+)

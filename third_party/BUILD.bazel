@@ -1,0 +1,41 @@
+# Third-party tool builds.
+#
+# Source-built (via rules_foreign_cc or genrule):
+#   //third_party/btop          — cmake, system monitor
+#   //third_party/git           — genrule, version control (+ libexec)
+#   //third_party/htop          — genrule, process viewer (needs autotools)
+#   //third_party/make:gnumake  — configure_make, GNU make
+#   //third_party/ncurses       — genrule, terminal UI library
+#   //third_party/zsh           — configure_make, Z shell (+ share)
+#   //third_party/eza           — genrule, ls replacement (needs cargo)
+#   //third_party/nvim:nvim_from_source — genrule, neovim (needs cmake + network)
+#
+# Pre-built binaries (downloaded per-platform):
+#   //third_party/fd            — file finder
+#   //third_party/bat           — cat with syntax highlighting
+#   //third_party/rg            — ripgrep
+#   //third_party/delta         — git diff viewer
+#   //third_party/dust          — disk usage analyzer
+#   //third_party/fzf           — fuzzy finder
+#   //third_party/lazygit       — git TUI
+#   //third_party/age           — file encryption (+ age-keygen)
+#   //third_party/direnv        — per-directory env vars
+#   //third_party/jq            — JSON processor
+#   //third_party/nvim          — neovim pre-built
+#   //third_party/go_sdk        — Go SDK
+#   //third_party/zig           — Zig compiler (C/C++ toolchain)
+#
+# Shell assets:
+#   //third_party/bat_extras    — batman shell script
+#   //third_party/fzf:shell     — fzf key-bindings + completion
+#   //third_party/eza:theme     — tokyo-night theme
+#   //third_party/zsh_plugins:autosuggestions
+#   //third_party/zsh_plugins:fast_syntax_highlighting
+#   //third_party/zsh_plugins:history_substring_search
+#   //third_party/zsh_plugins:powerlevel10k
+#
+# Bundle targets:
+#   //bundle:all                — everything
+#   //bundle:prebuilt           — pre-built binaries only
+#   //bundle:source_built       — source-compiled tools only
+#   //bundle:shell_assets       — plugins and shell scripts

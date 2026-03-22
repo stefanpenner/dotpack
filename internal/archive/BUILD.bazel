@@ -1,0 +1,14 @@
+load("@rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "archive",
+    srcs = ["archive.go"],
+    importpath = "github.com/stefanpenner/devlayer/internal/archive",
+    visibility = ["//:__subpackages__"],
+)
+
+go_test(
+    name = "archive_test",
+    srcs = ["archive_test.go"],
+    embed = [":archive"],
+)

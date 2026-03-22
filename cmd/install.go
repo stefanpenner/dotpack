@@ -7,10 +7,10 @@ import (
 	"runtime"
 	"strings"
 
-	"github.com/stefanpenner/dotpack/internal/archive"
+	"github.com/stefanpenner/devlayer/internal/archive"
 )
 
-// Install extracts a dotpack bundle to the local DOTPACK_PREFIX.
+// Install extracts a devlayer bundle to the local DEVLAYER_PREFIX.
 func Install(scriptDir string) error {
 	osName := strings.ToLower(runtime.GOOS)
 	arch := runtime.GOARCH
@@ -28,9 +28,9 @@ func Install(scriptDir string) error {
 		ext = "zip"
 	}
 
-	bundle := filepath.Join(scriptDir, fmt.Sprintf("dotpack-%s-%s.%s", osName, arch, ext))
+	bundle := filepath.Join(scriptDir, fmt.Sprintf("devlayer-%s-%s.%s", osName, arch, ext))
 	if _, err := os.Stat(bundle); os.IsNotExist(err) {
-		return fmt.Errorf("no bundle found at %s\nRun: dotpack build --os %s --arch %s", bundle, osName, arch)
+		return fmt.Errorf("no bundle found at %s\nRun: devlayer build --os %s --arch %s", bundle, osName, arch)
 	}
 
 	prefix := defaultPrefix()
@@ -49,21 +49,45 @@ func Install(scriptDir string) error {
 	if err != nil {
 		return fmt.Errorf("extract: %w", err)
 	}
+	// Install dotfiles (if built)
+	dotfilesTar := filepath.Join(scriptDir, "devlayer-dotfiles.tar.gz")
+	if _, err := os.Stat(dotfilesTar); err == nil {
+		home, _ := os.UserHomeDir()
+		fmt.Println("==> Installing dotfiles...")
+		if err := archive.ExtractTarGz(dotfilesTar, home); err != nil {
+			return fmt.Errorf("dotfiles: %w", err)
+		}
+	}
+
+	// Install nvim plugins (if built)
+	nvimTar := filepath.Join(scriptDir, "devlayer-nvim-plugins.tar.gz")
+	if _, err := os.Stat(nvimTar); err == nil {
+		home, _ := os.UserHomeDir()
+		nvimDataDir := filepath.Join(home, ".local", "share", "nvim")
+		fmt.Println("==> Installing nvim plugins...")
+		if err := os.MkdirAll(nvimDataDir, 0755); err != nil {
+			return err
+		}
+		if err := archive.ExtractTarGz(nvimTar, nvimDataDir); err != nil {
+			return fmt.Errorf("nvim plugins: %w", err)
+		}
+	}
+
 	fmt.Printf("==> Done. Ensure PATH includes %s%cbin\n", prefix, filepath.Separator)
 	return nil
 }
 
-// defaultPrefix returns the install location from DOTPACK_PREFIX or the platform default.
+// defaultPrefix returns the install location from DEVLAYER_PREFIX or the platform default.
 func defaultPrefix() string {
-	if p := os.Getenv("DOTPACK_PREFIX"); p != "" {
+	if p := os.Getenv("DEVLAYER_PREFIX"); p != "" {
 		return p
 	}
 	home, _ := os.UserHomeDir()
 	if runtime.GOOS == "windows" {
 		if localAppData := os.Getenv("LOCALAPPDATA"); localAppData != "" {
-			return filepath.Join(localAppData, "dotpack")
+			return filepath.Join(localAppData, "devlayer")
 		}
-		return filepath.Join(home, "AppData", "Local", "dotpack")
+		return filepath.Join(home, "AppData", "Local", "devlayer")
 	}
 	return filepath.Join(home, ".local")
 }

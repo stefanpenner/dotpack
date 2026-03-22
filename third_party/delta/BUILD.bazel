@@ -1,0 +1,11 @@
+# delta — git diff viewer (pre-built binary)
+# Note: linux arm64 uses GNU target (no musl build available)
+alias(
+    name = "delta",
+    actual = select({
+        "//tools:linux_amd64": "@delta_linux_amd64//:delta",
+        "//tools:linux_arm64": "@delta_linux_arm64//:delta",
+        "//tools:darwin_arm64": "@delta_darwin_arm64//:delta",
+    }),
+    visibility = ["//visibility:public"],
+)

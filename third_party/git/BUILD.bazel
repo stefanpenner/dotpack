@@ -1,0 +1,28 @@
+load("//tools:versions.bzl", "VERSIONS")
+
+# Git — version control (built from source)
+# Uses kernel.org release tarball with pre-generated configure.
+# Produces git binary + libexec/git-core/ support files.
+genrule(
+    name = "git",
+    srcs = ["@git_src//:all_srcs"],
+    outs = ["git-install.tar.gz"],
+    cmd = """
+        set -e
+        export PATH="/opt/homebrew/bin:/usr/local/bin:$$PATH"
+        OUT=$$(pwd)/$@
+        SRC=$$(pwd)/external/+tool_repos+git_src
+        BUILD=$$(mktemp -d)
+        INSTALL=$$(mktemp -d)
+        cp -r $$SRC/* $$BUILD/
+        cd $$BUILD
+        make configure
+        ./configure --prefix=$$INSTALL --without-tcltk --without-python
+        make -j$$(nproc 2>/dev/null || sysctl -n hw.ncpu) CFLAGS="-Os -DNDEBUG"
+        make install
+        tar czf $$OUT -C $$INSTALL .
+        rm -rf $$BUILD $$INSTALL
+    """,
+    tags = ["no-sandbox"],
+    visibility = ["//visibility:public"],
+)

@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 )
@@ -154,7 +155,7 @@ func TarGzFull(url, outputDir string, stripComponents int) error {
 func ZipBinary(url, outputDir, binaryName string) error {
 	fmt.Printf("  %s\n", binaryName)
 
-	tmp, err := downloadToTemp(url, "dotpack-*.zip")
+	tmp, err := downloadToTemp(url, "devlayer-*.zip")
 	if err != nil {
 		return err
 	}
@@ -203,7 +204,7 @@ func ZipBinary(url, outputDir, binaryName string) error {
 // ZipFull downloads a .zip and extracts everything to outputDir.
 // If stripComponents > 0, it strips that many leading path components.
 func ZipFull(url, outputDir string, stripComponents int) error {
-	tmp, err := downloadToTemp(url, "dotpack-*.zip")
+	tmp, err := downloadToTemp(url, "devlayer-*.zip")
 	if err != nil {
 		return err
 	}
@@ -273,7 +274,7 @@ func ZipFull(url, outputDir string, stripComponents int) error {
 // ZipFiles downloads a .zip and extracts specified files.
 // fileMap maps archive paths (relative) to destination paths (absolute).
 func ZipFiles(url string, fileMap map[string]string) error {
-	tmp, err := downloadToTemp(url, "dotpack-*.zip")
+	tmp, err := downloadToTemp(url, "devlayer-*.zip")
 	if err != nil {
 		return err
 	}
@@ -327,7 +328,7 @@ func ZipFiles(url string, fileMap map[string]string) error {
 // directory to destDir. Used for plugins where the archive has a single
 // top-level directory like "repo-name-version/".
 func TarGzToDir(url, destDir string) error {
-	tmp, err := os.MkdirTemp("", "dotpack-plugin-*")
+	tmp, err := os.MkdirTemp("", "devlayer-plugin-*")
 	if err != nil {
 		return err
 	}
@@ -347,6 +348,31 @@ func TarGzToDir(url, destDir string) error {
 		return os.Rename(tmp, destDir)
 	}
 	return os.Rename(filepath.Join(tmp, entries[0].Name()), destDir)
+}
+
+// TarXzFull downloads a .tar.xz and extracts everything to outputDir.
+// If stripComponents > 0, it strips that many leading path components.
+// Uses the system tar command since Go stdlib doesn't support xz.
+func TarXzFull(url, outputDir string, stripComponents int) error {
+	tmp, err := downloadToTemp(url, "devlayer-*.tar.xz")
+	if err != nil {
+		return err
+	}
+	defer os.Remove(tmp)
+
+	if err := os.MkdirAll(outputDir, 0755); err != nil {
+		return err
+	}
+
+	args := []string{"xJf", tmp, "-C", outputDir}
+	if stripComponents > 0 {
+		args = append(args, fmt.Sprintf("--strip-components=%d", stripComponents))
+	}
+
+	cmd := exec.Command("tar", args...)
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	return cmd.Run()
 }
 
 // downloadToTemp downloads a URL to a temporary file and returns the path.

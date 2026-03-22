@@ -1,0 +1,23 @@
+load("@rules_foreign_cc//foreign_cc:defs.bzl", "cmake")
+
+# btop — terminal system monitor
+cmake(
+    name = "btop",
+    cache_entries = select({
+        "@platforms//os:linux": {
+            "CMAKE_BUILD_TYPE": "Release",
+            "BTOP_STATIC": "ON",
+            "BTOP_GPU": "OFF",
+            "BTOP_LTO": "OFF",
+        },
+        "//conditions:default": {
+            "CMAKE_BUILD_TYPE": "Release",
+            "BTOP_STATIC": "OFF",
+            "BTOP_GPU": "OFF",
+            "BTOP_LTO": "OFF",
+        },
+    }),
+    lib_source = "@btop_src//:all_srcs",
+    out_binaries = ["btop"],
+    visibility = ["//visibility:public"],
+)

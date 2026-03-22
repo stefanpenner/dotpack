@@ -105,12 +105,23 @@ RUN git clone --depth 1 --branch stable https://github.com/neovim/neovim.git && 
     strip /opt/nvim/bin/nvim
 
 # ============================================================
+# GNU make — static
+# ============================================================
+FROM base AS make-build
+ARG MAKE_VERSION=4.4.1
+RUN curl -fsSL "https://ftp.gnu.org/gnu/make/make-${MAKE_VERSION}.tar.gz" | tar xz && \
+    cd make-${MAKE_VERSION} && \
+    ./configure CFLAGS="-Os -DNDEBUG" LDFLAGS="-static" && \
+    make -j$(nproc) && \
+    strip make
+
+# ============================================================
 # Download pre-built binaries + assemble tarball
 # ============================================================
 FROM ubuntu:24.04 AS assembler
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
-      curl ca-certificates unzip file \
+      curl ca-certificates unzip file xz-utils \
     && rm -rf /var/lib/apt/lists/*
 
 COPY versions.env /tmp/versions.env
@@ -125,6 +136,7 @@ COPY --from=zsh-build /opt/zsh /staging/zsh/
 COPY --from=htop-build /build/htop/htop /staging/bin/htop
 COPY --from=btop-build /usr/local/bin/btop /staging/bin/btop
 COPY --from=nvim-build /opt/nvim /staging/nvim/
+COPY --from=make-build /build/make-*/make /staging/bin/make
 
 # Create wrapper scripts in bin/ (set env vars so tools are self-contained)
 RUN printf '#!/bin/sh\nPREFIX="$(cd "$(dirname "$0")/.." && pwd)"\nexport GIT_EXEC_PATH="$PREFIX/git/libexec/git-core"\nexec "$PREFIX/git/bin/git" "$@"\n' > /staging/bin/git && \
@@ -132,17 +144,20 @@ RUN printf '#!/bin/sh\nPREFIX="$(cd "$(dirname "$0")/.." && pwd)"\nexport GIT_EX
     printf '#!/bin/sh\nPREFIX="$(cd "$(dirname "$0")/.." && pwd)"\nexport VIMRUNTIME="$PREFIX/nvim/share/nvim/runtime"\nexec "$PREFIX/nvim/bin/nvim" "$@"\n' > /staging/bin/nvim && \
     printf '#!/bin/sh\nPREFIX="$(cd "$(dirname "$0")/.." && pwd)"\nexport GOROOT="$PREFIX/go"\nexec "$PREFIX/go/bin/go" "$@"\n' > /staging/bin/go && \
     printf '#!/bin/sh\nPREFIX="$(cd "$(dirname "$0")/.." && pwd)"\nexport GOROOT="$PREFIX/go"\nexec "$PREFIX/go/bin/gofmt" "$@"\n' > /staging/bin/gofmt && \
+    printf '#!/bin/sh\nPREFIX="$(cd "$(dirname "$0")/.." && pwd)"\nexec "$PREFIX/zig/zig" "$@"\n' > /staging/bin/zig && \
+    printf '#!/bin/sh\nPREFIX="$(cd "$(dirname "$0")/.." && pwd)"\nexec "$PREFIX/zig/zig" cc "$@"\n' > /staging/bin/cc && \
+    printf '#!/bin/sh\nPREFIX="$(cd "$(dirname "$0")/.." && pwd)"\nexec "$PREFIX/zig/zig" c++ "$@"\n' > /staging/bin/c++ && \
     chmod +x /staging/bin/*
 
 # Verify compiled binaries are static
 RUN echo "==> Verifying static linkage:" && \
-    for f in /staging/git/bin/git /staging/zsh/bin/zsh /staging/bin/htop /staging/bin/btop /staging/nvim/bin/nvim; do \
+    for f in /staging/git/bin/git /staging/zsh/bin/zsh /staging/bin/htop /staging/bin/btop /staging/nvim/bin/nvim /staging/bin/make; do \
       echo "  $(basename $f): $(file $f | grep -o 'statically linked' || echo 'dynamically linked')"; \
     done
 
 # Verify wrapper scripts are correct
 RUN echo "==> Verifying wrappers:" && \
-    for f in git zsh nvim go gofmt; do \
+    for f in git zsh nvim go gofmt zig cc c++; do \
       head -1 /staging/bin/$f | grep -q '#!/bin/sh' || { echo "FAIL: bin/$f is not a wrapper script"; exit 1; }; \
       echo "  bin/$f: wrapper ok"; \
     done
@@ -151,6 +166,6 @@ RUN echo "==> Verifying wrappers:" && \
 RUN find /staging -type f -executable | sort | xargs sha256sum > /staging/SHA256SUMS
 
 # Package
-RUN tar czf /dotpack.tar.gz -C /staging .
+RUN tar czf /devlayer.tar.gz -C /staging .
 
-CMD ["cat", "/dotpack.tar.gz"]
+CMD ["cat", "/devlayer.tar.gz"]

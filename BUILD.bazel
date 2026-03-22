@@ -1,0 +1,30 @@
+load("@gazelle//:def.bzl", "gazelle")
+load("@rules_go//go:def.bzl", "go_binary", "go_library")
+
+gazelle(
+    name = "gazelle",
+    prefix = "github.com/stefanpenner/devlayer",
+)
+
+go_library(
+    name = "devlayer_lib",
+    srcs = ["main.go"],
+    embedsrcs = [
+        "versions.env",
+        "Dockerfile",
+        "scripts/download-binaries.sh",
+    ],
+    importpath = "github.com/stefanpenner/devlayer",
+    visibility = ["//visibility:private"],
+    deps = [
+        "//cmd",
+        "//internal/versions",
+    ],
+)
+
+go_binary(
+    name = "devlayer",
+    embed = [":devlayer_lib"],
+    visibility = ["//visibility:public"],
+    x_defs = {"main.Version": "{STABLE_VERSION}"},
+)

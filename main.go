@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/stefanpenner/dotpack/cmd"
-	"github.com/stefanpenner/dotpack/internal/versions"
+	"github.com/stefanpenner/devlayer/cmd"
+	"github.com/stefanpenner/devlayer/internal/versions"
 )
 
 //go:embed versions.env
@@ -22,32 +22,33 @@ var downloadScript string
 var Version = "dev"
 
 func usage() {
-	fmt.Print(`Usage: dotpack <command> [options]
+	fmt.Print(`Usage: devlayer <command> [options]
 
 Commands:
-  build [--os OS] [--arch ARCH]   Build bundle (default: linux/current arch)
-  push <host>                     Deploy bundle to remote host via SSH
+  build [--os OS] [--arch ARCH]   Build bundle + dotfiles + nvim plugins
+  push <host>                     Deploy everything to remote host via SSH
   status <host>                   Show installed tool versions on host
-  install                         Install bundle locally (DOTPACK_PREFIX, default ~/.local)
+  install                         Install bundle locally (DEVLAYER_PREFIX, default ~/.local)
+  ls                              List installed tools, dotfiles, and nvim plugins
   clean                           Remove build artifacts and Docker image
   upgrade                         Download and install the latest release
-  version                         Print dotpack version
+  version                         Print devlayer version
   versions                        Print bundled tool versions
 
 Options:
   OS: linux, darwin, or windows (default: linux for Docker builds)
   ARCH defaults to current machine architecture
-  DOTPACK_PREFIX env var controls install location
-    (default: ~/.local on unix, %LOCALAPPDATA%\dotpack on Windows)
-  DOTPACK_NO_AUTOUPDATE=1 disables automatic update checks
+  DEVLAYER_PREFIX env var controls install location
+    (default: ~/.local on unix, %LOCALAPPDATA%\devlayer on Windows)
+  DEVLAYER_NO_AUTOUPDATE=1 disables automatic update checks
 
 Examples:
-  dotpack build                   Build for linux/current-arch
-  dotpack build --os darwin       Build for darwin/current-arch
-  dotpack build --os windows      Build for windows/current-arch
-  dotpack push nas                Deploy to NAS
-  dotpack status nas              Check versions on NAS
-  dotpack install                 Install locally
+  devlayer build                   Build for linux/current-arch
+  devlayer build --os darwin       Build for darwin/current-arch
+  devlayer build --os windows      Build for windows/current-arch
+  devlayer push nas                Deploy to NAS
+  devlayer status nas              Check versions on NAS
+  devlayer install                 Install locally
 `)
 }
 
@@ -93,6 +94,8 @@ func main() {
 		err = cmd.Status(host)
 	case "install":
 		err = cmd.Install(scriptDir)
+	case "ls":
+		err = cmd.Ls()
 	case "clean":
 		err = cmd.Clean(scriptDir)
 	case "upgrade":

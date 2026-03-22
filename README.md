@@ -1,47 +1,52 @@
-# dotpack
+# devlayer
 
-Hermetic, self-contained tool bundle for Linux, macOS, and Windows. All binaries are statically linked — no system dependencies required. dotpack itself is a single Go binary.
+Layer your dev environment onto any machine. Tools, config, and nvim plugins — one command.
+
+This is an **opinionated** tool. It ships a curated set of tools, expects a specific shell setup, and makes choices so you don't have to. If you want to pick and choose individual components, this isn't for you — devlayer gives you the whole stack or nothing.
+
+All binaries are statically linked — no system dependencies required. devlayer itself is a single Go binary.
 
 ## Quick start
 
 **Linux / macOS:**
 ```bash
-curl -fsSL https://raw.githubusercontent.com/stefanpenner/dotpack/master/scripts/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/stefanpenner/devlayer/master/scripts/install.sh | bash
 source ~/.profile
 ```
 
 **Windows (PowerShell):**
 ```powershell
-irm https://raw.githubusercontent.com/stefanpenner/dotpack/master/scripts/install.ps1 | iex
+irm https://raw.githubusercontent.com/stefanpenner/devlayer/master/scripts/install.ps1 | iex
 ```
 
 Or download the CLI directly and build:
 
 ```bash
 # Download the CLI (pick your platform)
-curl -fsSL https://github.com/stefanpenner/dotpack/releases/latest/download/dotpack-darwin-arm64 -o dotpack
-chmod +x dotpack
+curl -fsSL https://github.com/stefanpenner/devlayer/releases/latest/download/devlayer-darwin-arm64 -o devlayer
+chmod +x devlayer
 
 # Build and install the tool bundle
-./dotpack build --os darwin
-./dotpack install
+./devlayer build --os darwin
+./devlayer install
 ```
 
 ## Usage
 
 ```bash
-dotpack build                    # Build linux bundle (Docker)
-dotpack build --os darwin        # Build macOS bundle
-dotpack build --os darwin --nvim-head  # Build with nvim from HEAD
-dotpack build --os windows       # Build Windows bundle
-dotpack push nas                 # Deploy to remote host via SSH
-dotpack status                   # Check installed versions locally
-dotpack status nas               # Check installed versions on host
-dotpack upgrade                  # Download and install latest release
-dotpack install                  # Install bundle locally
-dotpack clean                    # Remove build artifacts
-dotpack version                  # Print dotpack version
-dotpack versions                 # Print bundled tool versions
+devlayer build                    # Build linux bundle (Docker)
+devlayer build --os darwin        # Build macOS bundle
+devlayer build --os darwin --nvim-head  # Build with nvim from HEAD
+devlayer build --os windows       # Build Windows bundle
+devlayer push nas                 # Deploy to remote host via SSH
+devlayer status                   # Check installed versions locally
+devlayer status nas               # Check installed versions on host
+devlayer upgrade                  # Download and install latest release
+devlayer install                  # Install bundle locally
+devlayer ls                       # List installed tools, dotfiles, and plugins
+devlayer clean                    # Remove build artifacts
+devlayer version                  # Print devlayer version
+devlayer versions                 # Print bundled tool versions
 ```
 
 ## What's included
@@ -65,8 +70,10 @@ dotpack versions                 # Print bundled tool versions
 | btop | yes | yes | — |
 | dust | yes | yes | yes |
 | age | yes | yes | yes |
+| zig (cc/c++) | yes | yes | yes |
+| make | yes | yes | — |
 | batman | yes | yes | — |
-| dotpack | yes | yes | yes |
+| devlayer | yes | yes | yes |
 
 Also bundles zsh plugins (autosuggestions, fast-syntax-highlighting, history-substring-search, powerlevel10k) and fzf shell integration on Linux/macOS.
 
@@ -108,7 +115,7 @@ source "$HOME/.local/share/fzf/completion.zsh"
 
 **Windows (PowerShell profile)**:
 ```powershell
-$env:PATH = "$env:LOCALAPPDATA\dotpack\bin;$env:PATH"
+$env:PATH = "$env:LOCALAPPDATA\devlayer\bin;$env:PATH"
 ```
 
 **direnv** — if using direnv, also add the hook:
@@ -123,24 +130,43 @@ eval "$(direnv hook zsh)"
 ## Deploy to a remote host
 
 ```bash
-dotpack build                    # Builds linux bundle via Docker
-dotpack push nas                 # Deploys to nas:~/.local/
-dotpack status nas               # Verify everything works
+devlayer build                    # Builds linux bundle via Docker
+devlayer push nas                 # Deploys to nas:~/.local/
+devlayer status nas               # Verify everything works
 ```
 
-## With dotfiles
+## Dotfiles & nvim plugins
 
-dotpack provides the tools. [dotfiles](https://github.com/stefanpenner/dotfiles) provides the config.
+devlayer can bundle your dotfiles and pre-downloaded nvim plugins alongside the tool bundle. Create `~/.config/devlayer/config.toml`:
+
+```toml
+[dotfiles]
+sync = [
+  ".config/nvim",
+  ".zshrc",
+  ".tmux.conf",
+  ".gitconfig",
+  ".p10k.zsh",
+]
+```
+
+If you use LazyVim (or any lazy.nvim setup), devlayer reads your `lazy-lock.json` and bundles all locally-installed plugins. On push, nvim starts fully loaded — no first-launch download.
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/stefanpenner/dotfiles/master/bootstrap.sh | sh
+devlayer build --os linux         # Builds tools + dotfiles + nvim plugins
+devlayer push nas                 # Deploys all three layers
 ```
+
+Three layers, one command:
+1. **Tools** → `$DEVLAYER_PREFIX/` (binaries)
+2. **Dotfiles** → `$HOME/` (your config files)
+3. **Nvim plugins** → `~/.local/share/nvim/lazy/` (pre-downloaded)
 
 ## Configuration
 
 | Variable | Default | Purpose |
 |----------|---------|---------|
-| `DOTPACK_PREFIX` | `~/.local` (unix) / `%LOCALAPPDATA%\dotpack` (Windows) | Install location for all tools |
+| `DEVLAYER_PREFIX` | `~/.local` (unix) / `%LOCALAPPDATA%\devlayer` (Windows) | Install location for all tools |
 | `XDG_DATA_HOME` | `~/.local/share` | Plugin/data search path (used by zsh config) |
 
 ## Updating tool versions
@@ -167,7 +193,7 @@ A weekly GHA workflow also checks for new upstream versions and opens PRs automa
 ## Building from source
 
 ```bash
-make build-go          # Build the dotpack CLI
+make build-go          # Build the devlayer CLI
 make build             # Build linux bundle (Docker)
 make build-darwin      # Build macOS bundle
 make build-windows     # Build Windows bundle

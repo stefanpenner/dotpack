@@ -6,10 +6,11 @@ import (
 	"path/filepath"
 
 	"github.com/stefanpenner/devlayer/internal/ssh"
+	"github.com/stefanpenner/devlayer/internal/versions"
 )
 
 // Push deploys a devlayer bundle to a remote host via SSH.
-func Push(host, scriptDir string) error {
+func Push(host, scriptDir string, vers *versions.Versions) error {
 	if host == "" {
 		return fmt.Errorf("usage: devlayer push <host>")
 	}
@@ -22,7 +23,10 @@ func Push(host, scriptDir string) error {
 
 	tarball := filepath.Join(scriptDir, fmt.Sprintf("devlayer-linux-%s.tar.gz", arch))
 	if _, err := os.Stat(tarball); os.IsNotExist(err) {
-		return fmt.Errorf("no bundle found at %s\nRun: devlayer build --arch %s", tarball, arch)
+		fmt.Printf("==> No bundle found, building for linux/%s...\n", arch)
+		if err := Build([]string{"--arch", arch}, vers, scriptDir); err != nil {
+			return fmt.Errorf("auto-build failed: %w", err)
+		}
 	}
 
 	// Get remote prefix

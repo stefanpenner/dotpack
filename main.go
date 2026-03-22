@@ -85,7 +85,7 @@ func main() {
 		if len(os.Args) > 2 {
 			host = os.Args[2]
 		}
-		err = cmd.Push(host, scriptDir)
+		err = cmd.Push(host, scriptDir, vers)
 	case "status":
 		host := ""
 		if len(os.Args) > 2 {

@@ -6,17 +6,17 @@ import (
 	"testing"
 )
 
-func TestParseLazyLock(t *testing.T) {
+func TestParseLockfile(t *testing.T) {
 	dir := t.TempDir()
-	lockfile := filepath.Join(dir, "lazy-lock.json")
+	lockfile := filepath.Join(dir, "nvim-pack-lock.json")
 	os.WriteFile(lockfile, []byte(`{
   "telescope.nvim": { "branch": "master", "commit": "abc123" },
   "nvim-treesitter": { "branch": "master", "commit": "def456" }
 }`), 0644)
 
-	plugins, err := ParseLazyLock(lockfile)
+	plugins, err := ParseLockfile(lockfile)
 	if err != nil {
-		t.Fatalf("ParseLazyLock: %v", err)
+		t.Fatalf("ParseLockfile: %v", err)
 	}
 	if len(plugins) != 2 {
 		t.Fatalf("expected 2 plugins, got %d", len(plugins))
@@ -38,22 +38,22 @@ func TestSyncPlugins(t *testing.T) {
 	dir := t.TempDir()
 
 	// Create lockfile
-	lockfile := filepath.Join(dir, "lazy-lock.json")
+	lockfile := filepath.Join(dir, "nvim-pack-lock.json")
 	os.WriteFile(lockfile, []byte(`{
   "myplugin": { "branch": "main", "commit": "aaa" },
   "missing": { "branch": "main", "commit": "bbb" }
 }`), 0644)
 
 	// Create local plugin directory (only myplugin exists)
-	localLazy := filepath.Join(dir, "local-lazy")
-	pluginDir := filepath.Join(localLazy, "myplugin")
+	localPlugins := filepath.Join(dir, "local-plugins")
+	pluginDir := filepath.Join(localPlugins, "myplugin")
 	os.MkdirAll(filepath.Join(pluginDir, ".git"), 0755)
 	os.WriteFile(filepath.Join(pluginDir, "init.lua"), []byte("-- plugin"), 0644)
 	os.WriteFile(filepath.Join(pluginDir, ".git", "config"), []byte("gitconfig"), 0644)
 
 	// Sync
 	destDir := filepath.Join(dir, "dest")
-	err := SyncPlugins(lockfile, localLazy, destDir)
+	err := SyncPlugins(lockfile, localPlugins, destDir)
 	if err != nil {
 		t.Fatalf("SyncPlugins: %v", err)
 	}

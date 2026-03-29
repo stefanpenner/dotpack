@@ -7,6 +7,8 @@ import (
 	"runtime"
 	"strings"
 
+	"os/exec"
+
 	"github.com/stefanpenner/devlayer/internal/archive"
 )
 
@@ -49,6 +51,17 @@ func Install(scriptDir string) error {
 	if err != nil {
 		return fmt.Errorf("extract: %w", err)
 	}
+	// Re-sign Mach-O binaries on macOS (extraction invalidates adhoc signatures)
+	if runtime.GOOS == "darwin" {
+		binDir := filepath.Join(prefix, "bin")
+		nvimBin := filepath.Join(prefix, "nvim", "bin", "nvim")
+		for _, bin := range []string{nvimBin, filepath.Join(binDir, "nvim")} {
+			if info, err := os.Lstat(bin); err == nil && info.Mode().IsRegular() {
+				exec.Command("codesign", "--force", "--sign", "-", bin).Run()
+			}
+		}
+	}
+
 	// Install dotfiles (if built)
 	dotfilesTar := filepath.Join(scriptDir, "devlayer-dotfiles.tar.gz")
 	if _, err := os.Stat(dotfilesTar); err == nil {

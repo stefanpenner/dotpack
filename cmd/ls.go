@@ -160,12 +160,12 @@ func lsDotfiles() {
 	fmt.Println(l)
 }
 
-// lsNvimPlugins lists installed nvim plugins from the lazy directory.
+// lsNvimPlugins lists installed nvim plugins from the vim.pack directory.
 func lsNvimPlugins() {
-	lazyDir := nvimplugins.LocalLazyDir()
-	fmt.Println(heading.Render("Nvim Plugins") + " " + subtext.Render(lazyDir))
+	pluginDir := nvimplugins.LocalPluginDir()
+	fmt.Println(heading.Render("Nvim Plugins") + " " + subtext.Render(pluginDir))
 
-	entries, err := os.ReadDir(lazyDir)
+	entries, err := os.ReadDir(pluginDir)
 	if os.IsNotExist(err) {
 		fmt.Println(dimText.Render("  (no plugins installed)"))
 		return

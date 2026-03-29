@@ -891,10 +891,36 @@ func buildMake(binDir string, vers *versions.Versions) error {
 func createZigCCWrappers(binDir string) error {
 	ccScript := `#!/bin/sh
 PREFIX="$(cd "$(dirname "$0")/.." && pwd)"
+
+# Normalize target triples for zig compatibility:
+#   arm64 → aarch64    (zig doesn't recognize Apple's "arm64")
+#   strip "apple" vendor (zig doesn't recognize it in --target)
+#   macosx → macos     (zig uses "macos")
+for arg in "$@"; do
+  shift
+  case "$arg" in
+    --target=*) arg=$(echo "$arg" | sed 's/arm64/aarch64/;s/-apple//;s/macosx/macos/') ;;
+  esac
+  set -- "$@" "$arg"
+done
+
 exec "$PREFIX/zig/zig" cc "$@"
 `
 	cxxScript := `#!/bin/sh
 PREFIX="$(cd "$(dirname "$0")/.." && pwd)"
+
+# Normalize target triples for zig compatibility:
+#   arm64 → aarch64    (zig doesn't recognize Apple's "arm64")
+#   strip "apple" vendor (zig doesn't recognize it in --target)
+#   macosx → macos     (zig uses "macos")
+for arg in "$@"; do
+  shift
+  case "$arg" in
+    --target=*) arg=$(echo "$arg" | sed 's/arm64/aarch64/;s/-apple//;s/macosx/macos/') ;;
+  esac
+  set -- "$@" "$arg"
+done
+
 exec "$PREFIX/zig/zig" c++ "$@"
 `
 	if err := os.WriteFile(filepath.Join(binDir, "cc"), []byte(ccScript), 0755); err != nil {
@@ -975,9 +1001,9 @@ func buildDotfiles(scriptDir string) error {
 }
 
 // buildNvimPlugins copies locally-installed nvim plugins into a tarball.
-// Skipped silently if lazy-lock.json doesn't exist.
+// Skipped silently if nvim-pack-lock.json doesn't exist.
 func buildNvimPlugins(scriptDir string) error {
-	lockfile := nvimplugins.LazyLockPath()
+	lockfile := nvimplugins.LockfilePath()
 	if _, err := os.Stat(lockfile); os.IsNotExist(err) {
 		return nil
 	}
@@ -990,13 +1016,13 @@ func buildNvimPlugins(scriptDir string) error {
 	}
 	defer os.RemoveAll(staging)
 
-	lazyDir := filepath.Join(staging, "lazy")
-	if err := nvimplugins.SyncPlugins(lockfile, nvimplugins.LocalLazyDir(), lazyDir); err != nil {
+	pluginDir := filepath.Join(staging, "site", "pack", "core", "opt")
+	if err := nvimplugins.SyncPlugins(lockfile, nvimplugins.LocalPluginDir(), pluginDir); err != nil {
 		return fmt.Errorf("sync nvim plugins: %w", err)
 	}
 
 	// Count plugins
-	entries, _ := os.ReadDir(lazyDir)
+	entries, _ := os.ReadDir(pluginDir)
 	fmt.Printf("  %d plugins\n", len(entries))
 
 	outputFile := filepath.Join(scriptDir, "devlayer-nvim-plugins.tar.gz")

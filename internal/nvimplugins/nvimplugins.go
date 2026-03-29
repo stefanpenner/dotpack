@@ -10,15 +10,15 @@ import (
 	"strings"
 )
 
-// Plugin represents one entry from lazy-lock.json.
+// Plugin represents one entry from nvim-pack-lock.json.
 type Plugin struct {
 	Name   string
 	Branch string `json:"branch"`
 	Commit string `json:"commit"`
 }
 
-// ParseLazyLock reads lazy-lock.json and returns plugin entries.
-func ParseLazyLock(path string) ([]Plugin, error) {
+// ParseLockfile reads nvim-pack-lock.json and returns plugin entries.
+func ParseLockfile(path string) ([]Plugin, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return nil, err
@@ -26,7 +26,7 @@ func ParseLazyLock(path string) ([]Plugin, error) {
 
 	var raw map[string]Plugin
 	if err := json.Unmarshal(data, &raw); err != nil {
-		return nil, fmt.Errorf("parse lazy-lock.json: %w", err)
+		return nil, fmt.Errorf("parse nvim-pack-lock.json: %w", err)
 	}
 
 	plugins := make([]Plugin, 0, len(raw))
@@ -37,28 +37,28 @@ func ParseLazyLock(path string) ([]Plugin, error) {
 	return plugins, nil
 }
 
-// LazyLockPath returns the default lazy-lock.json location.
-func LazyLockPath() string {
+// LockfilePath returns the default nvim-pack-lock.json location.
+func LockfilePath() string {
 	if xdg := os.Getenv("XDG_CONFIG_HOME"); xdg != "" {
-		return filepath.Join(xdg, "nvim", "lazy-lock.json")
+		return filepath.Join(xdg, "nvim", "nvim-pack-lock.json")
 	}
 	home, _ := os.UserHomeDir()
-	return filepath.Join(home, ".config", "nvim", "lazy-lock.json")
+	return filepath.Join(home, ".config", "nvim", "nvim-pack-lock.json")
 }
 
-// LocalLazyDir returns the default lazy plugin install directory.
-func LocalLazyDir() string {
+// LocalPluginDir returns the default vim.pack plugin install directory.
+func LocalPluginDir() string {
 	if xdg := os.Getenv("XDG_DATA_HOME"); xdg != "" {
-		return filepath.Join(xdg, "nvim", "lazy")
+		return filepath.Join(xdg, "nvim", "site", "pack", "core", "opt")
 	}
 	home, _ := os.UserHomeDir()
-	return filepath.Join(home, ".local", "share", "nvim", "lazy")
+	return filepath.Join(home, ".local", "share", "nvim", "site", "pack", "core", "opt")
 }
 
-// SyncPlugins copies locally-installed plugins (at their lazy-lock.json pinned
+// SyncPlugins copies locally-installed plugins (at their lockfile pinned
 // commits) into destDir, stripping .git directories to save space.
-func SyncPlugins(lockfilePath, localLazyDir, destDir string) error {
-	plugins, err := ParseLazyLock(lockfilePath)
+func SyncPlugins(lockfilePath, localPluginDir, destDir string) error {
+	plugins, err := ParseLockfile(lockfilePath)
 	if err != nil {
 		return err
 	}
@@ -69,7 +69,7 @@ func SyncPlugins(lockfilePath, localLazyDir, destDir string) error {
 
 	var skipped []string
 	for _, p := range plugins {
-		srcDir := filepath.Join(localLazyDir, p.Name)
+		srcDir := filepath.Join(localPluginDir, p.Name)
 		if _, err := os.Stat(srcDir); os.IsNotExist(err) {
 			skipped = append(skipped, p.Name)
 			continue

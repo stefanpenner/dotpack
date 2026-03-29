@@ -1,6 +1,14 @@
 load("@gazelle//:def.bzl", "gazelle")
 load("@rules_go//go:def.bzl", "go_binary", "go_library")
 
+exports_files(
+    [
+        "versions.env",
+        "Dockerfile",
+    ],
+    visibility = ["//visibility:public"],
+)
+
 gazelle(
     name = "gazelle",
     prefix = "github.com/stefanpenner/devlayer",
@@ -12,7 +20,7 @@ go_library(
     embedsrcs = [
         "versions.env",
         "Dockerfile",
-        "scripts/download-binaries.sh",
+        "//scripts:download-binaries.sh",
     ],
     importpath = "github.com/stefanpenner/devlayer",
     visibility = ["//visibility:private"],

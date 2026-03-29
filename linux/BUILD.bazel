@@ -1,0 +1,17 @@
+# Linux bundle build — replaces monolithic Dockerfile with per-tool Bazel targets.
+#
+# Each source-compiled tool has its own genrule that compiles in a Docker
+# container. Tools are built independently and cached by Bazel, so changing
+# one tool only rebuilds that tool.
+#
+# Usage:
+#   bazel build //linux:bundle_x86_64     # Build x86_64 bundle
+#   bazel build //linux:bundle_aarch64    # Build aarch64 bundle
+#
+# Prerequisites: Docker must be available on the build machine.
+
+load(":defs.bzl", "linux_targets")
+
+linux_targets("x86_64")
+
+linux_targets("aarch64")

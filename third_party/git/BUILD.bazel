@@ -1,4 +1,4 @@
-load("//tools:versions.bzl", "VERSIONS")
+load("@versions//:versions.bzl", "VERSIONS")
 
 # Git — version control (built from source)
 # Uses kernel.org release tarball with pre-generated configure.

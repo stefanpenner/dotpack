@@ -56,8 +56,7 @@ jobs:
             printf '%b' "$UPDATES" > /tmp/updates.txt
             echo "==> Updates found:"
             cat /tmp/updates.txt
-            # Sync versions.bzl from versions.env
-            tools/sync_versions_bzl.sh
+            # versions.env is the single source of truth — Bazel reads it directly
           else
             echo "has_updates=false" >> "$GITHUB_OUTPUT"
             echo "==> All tools are up to date"
@@ -70,7 +69,7 @@ jobs:
         run: |
           BRANCH="auto/update-versions-$(date +%Y%m%d)"
           git checkout -b "$BRANCH"
-          git add versions.env tools/versions.bzl
+          git add versions.env
           git commit -m "$(cat <<EOF
           chore: update tool versions
 

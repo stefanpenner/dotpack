@@ -39,3 +39,7 @@
 #   //bundle:prebuilt           — pre-built binaries only
 #   //bundle:source_built       — source-compiled tools only
 #   //bundle:shell_assets       — plugins and shell scripts
+#
+# Linux bundle (Docker-based, replaces monolithic Dockerfile):
+#   //linux:bundle_x86_64      — full Linux x86_64 bundle
+#   //linux:bundle_aarch64     — full Linux aarch64 bundle

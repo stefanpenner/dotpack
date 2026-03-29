@@ -1,0 +1,8 @@
+exports_files(
+    [
+        "download-binaries.sh",
+        "install.sh",
+        "install.ps1",
+    ],
+    visibility = ["//visibility:public"],
+)

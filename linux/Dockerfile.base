@@ -1,0 +1,17 @@
+# Alpine base image with all build dependencies for compiling static binaries.
+# Used by per-tool genrules in BUILD.bazel.
+FROM alpine:3.21
+
+RUN apk add --no-cache \
+    build-base cmake git curl wget linux-headers \
+    ncurses-dev ncurses-static \
+    go ninja gettext-tiny-dev unzip autoconf automake libtool pkgconf \
+    zlib-dev zlib-static \
+    openssl-dev openssl-libs-static \
+    curl-dev curl-static \
+    expat-dev expat-static \
+    pcre2-dev perl \
+    nghttp2-static brotli-static \
+    libidn2-static libunistring-static libpsl-static zstd-static
+
+WORKDIR /build

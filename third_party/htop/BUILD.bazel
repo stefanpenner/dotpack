@@ -1,4 +1,4 @@
-load("//tools:versions.bzl", "VERSIONS")
+load("@versions//:versions.bzl", "VERSIONS")
 
 # htop — interactive process viewer (built from source)
 # Requires autotools (autoconf, automake, libtool) on the host.

@@ -1,7 +1,7 @@
 """Module extension for fetching all third-party tool sources and pre-built binaries."""
 
 load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive", "http_file")
-load("//tools:versions.bzl", "VERSIONS")
+load("@versions//:versions.bzl", "VERSIONS")
 
 # ─── Build file content templates ─────────────────────────────────────────────
 

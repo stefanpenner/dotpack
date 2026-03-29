@@ -35,8 +35,28 @@ use_repo(toolchains, "zig_sdk")
 # ─── Platforms ───────────────────────────────────────────────────────────────
 bazel_dep(name = "platforms", version = "1.0.0")
 
+# ─── OCI container images ────────────────────────────────────────────────────
+bazel_dep(name = "rules_oci", version = "2.3.0")
+
+oci = use_extension("@rules_oci//oci:extensions.bzl", "oci")
+
+oci.pull(
+    name = "alpine",
+    digest = "sha256:c3f8e73fdb79deaebaa2037150150191b9dcbfba68b4a46d70103204c53f4709",
+    image = "docker.io/library/alpine",
+    platforms = [
+        "linux/amd64",
+        "linux/arm64/v8",
+    ],
+)
+use_repo(oci, "alpine", "alpine_linux_amd64", "alpine_linux_arm64_v8")
+
 # ─── Foreign CC (cmake/autotools builds) ────────────────────────────────────
 bazel_dep(name = "rules_foreign_cc", version = "0.14.0")
+
+# ─── Versions (single source of truth: versions.env) ───────────────────────
+versions = use_extension("//tools:versions_ext.bzl", "versions_ext")
+use_repo(versions, "versions")
 
 # ─── Third-party tools (sources, pre-built binaries, shell assets) ─────────
 tool_repos = use_extension("//tools:extensions.bzl", "tool_repos")

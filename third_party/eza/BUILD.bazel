@@ -1,4 +1,4 @@
-load("//tools:versions.bzl", "VERSIONS")
+load("@versions//:versions.bzl", "VERSIONS")
 
 # eza — modern ls replacement
 # Built from source using cargo (requires Rust toolchain + network).

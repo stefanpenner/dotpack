@@ -54,9 +54,6 @@ jobs:
             ./bazel-bin/devlayer_/devlayer versions
           fi
 
-      - name: Version sync check
-        if: matrix.os != 'windows'
-        run: tools/versions_sync_test.sh
 
   # Build devlayer CLI binaries for all platforms (cross-compiled via Bazel)
   cli:
@@ -108,7 +105,7 @@ jobs:
           gh release upload "${{ github.event.release.tag_name }}" \
             devlayer-${{ matrix.name }}${{ matrix.binary == 'devlayer.exe' && '.exe' || '' }}
 
-  # Build Linux tool bundles (Docker)
+  # Build Linux tool bundles (Bazel + Docker)
   linux:
     needs: cli
     strategy:
@@ -124,6 +121,15 @@ jobs:
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
+      - name: Cache Bazel
+        uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
+        with:
+          path: |
+            ~/.cache/bazel
+            ~/.cache/bazelisk
+          key: bazel-linux-bundle-${{ matrix.arch }}-${{ hashFiles('.bazelversion', 'MODULE.bazel', 'MODULE.bazel.lock') }}
+          restore-keys: bazel-linux-bundle-${{ matrix.arch }}-
+
       - name: Download CLI artifact
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
@@ -131,12 +137,12 @@ jobs:
 
       - name: Build Linux bundle
         run: |
-          chmod +x devlayer-linux-${{ matrix.arch }}
-          docker build -t devlayer .
-          docker run --rm devlayer > devlayer-linux-${{ matrix.arch }}.tar.gz
+          bazel build //linux:bundle_${{ matrix.arch }}
+          cp bazel-bin/linux/devlayer-linux-${{ matrix.arch }}.tar.gz .
           # Inject devlayer CLI into the bundle
           tmpdir=$(mktemp -d)
           tar xzf devlayer-linux-${{ matrix.arch }}.tar.gz -C "$tmpdir"
+          chmod +x devlayer-linux-${{ matrix.arch }}
           cp devlayer-linux-${{ matrix.arch }} "$tmpdir/bin/devlayer"
           tar czf devlayer-linux-${{ matrix.arch }}.tar.gz -C "$tmpdir" .
           rm -rf "$tmpdir"
